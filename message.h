@@ -1,10 +1,16 @@
 
 #define DEBUG2 1
 
+#define TRUE 1
+#define FALSE 0
+
+#define MAXHANDLERS 1
+
+
 typedef struct mailSlot *slotPtr;
 typedef struct mailbox   mailbox;
 typedef struct mboxProc *mboxProcPtr;
-
+typedef void (*interruptHandler)(int)
 
 struct mailbox {
     int       mboxID;
@@ -18,6 +24,7 @@ struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
+    int   isActive;
     char * message[MAX_MESSAGE];
     struct mailSlot * nextSlot;
 };

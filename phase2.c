@@ -26,8 +26,11 @@ mailbox MailBoxTable[MAXMBOX];
 
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
+// a process table for phase2
+procStruct p2procTable[MAXPROC];
 
-
+mailSlot slottyArray[MAXSLOTS];
+interruptHandler intTable[MAXHANDLERS];
 
 
 /* -------------------------- Functions ----------------------------------- */
@@ -51,6 +54,10 @@ int start1(char *arg)
     disableInterrupts();
 
     // Initialize the mail box table, slots, & other data structures.
+    int iter = 0;
+    for(;iter < MAXMBOX; iter++){
+      MailBoxTable[iter].mboxID = -1;
+      
     // Initialize USLOSS_IntVec and system call handlers,
     // allocate mailboxes for interrupt handlers.  Etc... 
 
