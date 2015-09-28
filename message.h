@@ -6,27 +6,32 @@
 
 #define MAXHANDLERS 1
 
+#define INACTIVE 0
+#define ACTIVE 1
 
-typedef struct mailSlot *slotPtr;
+
+typedef struct mailSlot mailSlot;
+typedef struct mailSlot * slotPtr;
 typedef struct mailbox   mailbox;
 typedef struct mboxProc *mboxProcPtr;
-typedef void (*interruptHandler)(int)
+typedef void (*interruptHandler)(int);
+typedef struct procStruct procStruct;
 
 struct mailbox {
     int       mboxID;
     // other items as needed...
-    int numSlots;
+    int maxSlots;
+    int usedSlots;
     int slotSize;
-    struct mailSlot * slotPtr;
+    slotPtr firstSlot;
 };
 
 struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
-    int   isActive;
-    char * message[MAX_MESSAGE];
-    struct mailSlot * nextSlot;
+    char * message;
+    slotPtr nextSlot;
 };
 
 struct psrBits {
@@ -35,6 +40,11 @@ struct psrBits {
     unsigned int prevMode:1;
     unsigned int prevIntEnable:1;
     unsigned int unused:28;
+};
+
+struct procStruct{
+    int pid;
+    int status;
 };
 
 union psrValues {

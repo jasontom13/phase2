@@ -9,8 +9,8 @@
 #include <phase1.h>
 #include <phase2.h>
 #include <usloss.h>
-
 #include "message.h"
+#include "libpatrickphase1.a"
 
 /* ------------------------- Prototypes ----------------------------------- */
 int start1 (char *);
@@ -23,6 +23,7 @@ int debugflag2 = 0;
 
 // the mail boxes 
 mailbox MailBoxTable[MAXMBOX];
+int boxID;
 
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
@@ -45,6 +46,9 @@ interruptHandler intTable[MAXHANDLERS];
    ----------------------------------------------------------------------- */
 int start1(char *arg)
 {
+    int kid_pid;
+    int status;
+    
     if (DEBUG2 && debugflag2)
         USLOSS_Console("start1(): at beginning\n");
 
@@ -57,7 +61,10 @@ int start1(char *arg)
     int iter = 0;
     for(;iter < MAXMBOX; iter++){
       MailBoxTable[iter].mboxID = -1;
-      
+    }
+
+    boxID=11;
+    
     // Initialize USLOSS_IntVec and system call handlers,
     // allocate mailboxes for interrupt handlers.  Etc... 
 
@@ -87,6 +94,20 @@ int start1(char *arg)
    ----------------------------------------------------------------------- */
 int MboxCreate(int slots, int slot_size)
 {
+    /* Finding the first free mailbox slot in mailboxtable */
+    int i;
+    for(i=boxID; i<boxID+MAXMBOX; i++){
+        if(MailBoxTable[i%MAXMBOX].mboxID!=-1){
+            boxID=i;
+            MailBoxTable[i%MAXMBOX].mboxID = boxID;
+            MailBoxTable[i%MAXMBOX].maxSlots = slots;
+            MailBoxTable[i%MAXMBOX].usedSlots = 0;
+            MailBoxTable[i%MAXMBOX].slotSize =  slot_size>MAX_MESSAGE ? MAX_MESSAGE : slot_size;
+            MailBoxTable[i%MAXMBOX].firstSlot = NULL;
+            return boxID;
+        }
+    }
+    return -1;
 } /* MboxCreate */
 
 
@@ -100,6 +121,49 @@ int MboxCreate(int slots, int slot_size)
    ----------------------------------------------------------------------- */
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
+    // If inactive mailbox
+    if(MailBoxTable[mbox_id%MAXMBOX].mboxID==-1)
+        return -1;
+    // If message size too big
+    if(MailBoxTable[mbox_id%MAXMBOX].slotSize<msg_size)
+        return -1;
+    
+    // If no slots available, block the sending process
+    if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
+        blockMe(mbox_id);
+    }
+    
+    // Adding message to slot in mailbox
+    slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
+    for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
+    
+    mailSlot mailSlot;
+    mailSlot.message = msg_ptr;
+    mailSlot.mboxID = mbox_id;
+    mailSlot.nextSlot = NULL;
+    mailSlot.status = ACTIVE;
+    
+    slot->nextSlot = &mailSlot;
+    
+    
+    
+    
+    return 0;
+    
+    
+    
+    /*Check for possible errors (message size too large, inactive mailbox id, etc.).
+     • Return -1 if errors are found.
+     • If a slot is available in this mailbox, allocate a slot from your mail slot table. MAXSLOTS determines the size of
+     this array. MAX_MESSAGE determines the max number of bytes that can be held in the slot.
+     • Note: if the mail slot table overflows, that is an error that should halt USLOSS.
+     • Further note: for conditional send, the mail slot table overflow does not halt USLOSS.
+     • Return -2 in this case.
+     • Copy message into this slot. Use memcpy, not strcpy: messages can hold any type of data, not just strings.
+     • Block the sender if this mailbox has no available slots. For example, mailbox has 5 slots, all of which
+     already have a message.
+     */
+    
 } /* MboxSend */
 
 
