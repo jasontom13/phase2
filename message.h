@@ -5,15 +5,21 @@ typedef struct mailSlot *slotPtr;
 typedef struct mailbox   mailbox;
 typedef struct mboxProc *mboxProcPtr;
 
+
 struct mailbox {
     int       mboxID;
     // other items as needed...
+    int numSlots;
+    int slotSize;
+    struct mailSlot * slotPtr;
 };
 
 struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
+    char * message[MAX_MESSAGE];
+    struct mailSlot * nextSlot;
 };
 
 struct psrBits {
