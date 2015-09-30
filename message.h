@@ -28,7 +28,8 @@ struct mailbox {
     int slotSize;
     slotPtr firstSlot;
     /* a list of processes waiting for slots */
-    procStruct * waitList;
+    mailLine receiveList;
+    mailLine sendList;
 };
 
 struct mailSlot {
@@ -50,7 +51,6 @@ struct psrBits {
 struct procStruct{
     int pid;
     int status;
-    procStruct * nextProc;
 };
 
 union psrValues {
