@@ -10,7 +10,7 @@
 typedef struct mailSlot *slotPtr;
 typedef struct mailbox   mailbox;
 typedef struct mboxProc *mboxProcPtr;
-typedef void (*interruptHandler)(int)
+typedef void (*interruptHandler)(int);
 
 struct mailbox {
     int       mboxID;

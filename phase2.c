@@ -114,7 +114,17 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
-    
+ /* test if in kernel mode; halt if in user mode */
+ if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+   USLOSS_Halt(1);
+ 
+ /* disable interrupts */
+ disableInterrupts();
+ 
+ /* if the process is not able to obtain a message from the appropriate mailbox, block */
+ if(
+	
+ 
 } /* MboxReceive */
 
 /* returns 0 if successful, 1 if mailbox full, -1 if illegal args */
