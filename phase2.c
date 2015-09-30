@@ -29,6 +29,7 @@ int boxID;
 // handlers, ...
 // a process table for phase2
 procStruct p2procTable[MAXPROC];
+int slotsUsed;
 
 mailSlot slottyArray[MAXSLOTS];
 interruptHandler intTable[MAXHANDLERS];
@@ -62,7 +63,13 @@ int start1(char *arg)
     for(;iter < MAXMBOX; iter++){
       MailBoxTable[iter].mboxID = -1;
     }
+    
+    for(iter=0;iter < MAXPROC; iter++){
+        p2procTable[iter].pid=-1;
+        p2procTable[iter].status=-1;
+    }
 
+    slotsUsed=0;
     boxID=11;
     
     // Initialize USLOSS_IntVec and system call handlers,
@@ -128,8 +135,16 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     if(MailBoxTable[mbox_id%MAXMBOX].slotSize<msg_size)
         return -1;
     
+    if(slotsUsed > MAXSLOTS){
+        USLOSS_Console("Exceeded the number of system slots allowed. Halting...\n");
+        USLOSS_Halt(1);
+    }
+        
+    
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
+        p2procTable[getpid()%MAXPROC].status = mbox_id;
+        p2procTable[getpid()%MAXPROC].pid = getpid();
         blockMe(mbox_id);
     }
     
@@ -138,14 +153,24 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
     
     mailSlot mailSlot;
-    mailSlot.message = msg_ptr;
+    memcpy(mailSlot.message, msg_ptr, msg_size);
     mailSlot.mboxID = mbox_id;
     mailSlot.nextSlot = NULL;
     mailSlot.status = ACTIVE;
     
     slot->nextSlot = &mailSlot;
     
+    // Unblock any processes waiting on receiving a message from the mailbox
+    int i;
+    for(i=0; i<MAXPROC; i++){
+        if(p2procTable[i].status == mbox_id){
+            unblockProc(p2procTable[i].pid);
+        }
+    }
     
+    
+    // Increment amount of total system slots used
+    slotsUsed++;
     
     
     return 0;
