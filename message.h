@@ -15,10 +15,7 @@ typedef struct mailSlot * slotPtr;
 typedef struct mailbox   mailbox;
 typedef struct mboxProc *mboxProcPtr;
 typedef void (*interruptHandler)(int);
-<<<<<<< HEAD
-=======
 typedef struct procStruct procStruct;
->>>>>>> 32a77f78bfb9385c0b47df827b70973257b595db
 
 struct mailbox {
     int       mboxID;
