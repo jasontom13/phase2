@@ -112,8 +112,8 @@ int MboxCreate(int slots, int slot_size)
             MailBoxTable[i%MAXMBOX].slotSize =  slot_size>MAX_MESSAGE ? MAX_MESSAGE : slot_size;
             MailBoxTable[i%MAXMBOX].firstSlot = NULL;
             MailBoxTable[i%MAXMBOX].sendList = NULL;
-            MailBoxTable[i%MAXMBOX].recieveList = NULL;
-            
+            MailBoxTable[i%MAXMBOX].receiveList = NULL;
+            MailBoxTable[i%MAXMBOX].status = ACTIVE;
             return boxID;
         }
     }
@@ -146,9 +146,27 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
+        
+        mailLine * new;
+        new->PID = getpid();
+        new->next = NULL;
+        mailLine * temp = MailBoxTable[mbox_id%MAXMBOX].sendList;
+        
+        if(temp!=NULL){
+            for(; temp->next!=NULL; temp = temp->next);
+            temp->next = new;
+        }
+        else{
+            temp = new;
+        }
+        
         p2procTable[getpid()%MAXPROC].status = mbox_id;
         p2procTable[getpid()%MAXPROC].pid = getpid();
         blockMe(mbox_id);
+    }
+    
+    if(isZapped()){
+        return -3;
     }
     
     // Adding message to slot in mailbox
@@ -164,8 +182,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     slot->nextSlot = &mailSlot;
     
     // Unblock the first process waiting on receiving a message from the mailbox
-    if(MailBoxTable[mbox_id].sendList!=NULL){
-        
+    if(MailBoxTable[mbox_id%MAXMBOX].sendList!=NULL){
+        unblockProc(MailBoxTable[mbox_id%MAXMBOX].sendList->PID);
+        MailBoxTable[mbox_id%MAXMBOX].sendList = MailBoxTable[mbox_id%MAXMBOX].sendList->next;
     }
     
     
@@ -216,6 +235,8 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
    if(MailBoxTable[mbox_id % MAXMBOX].waitList == NULL){
      MailBoxTable[mbox_id % MAXMBOX].waitList = new
    blockMe(mbox_id);
+   }
+ }
    
 	
  
@@ -280,5 +301,31 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
  ----------------------------------------------------------------------- */
 int MboxRelease(int mbox_id)
 {
+    // If mailbox not in use
+    if(MailBoxTable[mbox_id%MAXMBOX].mboxID == -1)
+        return -1;
+    
+    MailBoxTable[mbox_id%MAXMBOX].status = INACTIVE;
+    
+    // Zapping all blocked processes on mailbox DOES NOT WORK
+    mailLine * temp;
+    for(temp = MailBoxTable[mbox_id%MAXMBOX].sendList; temp!=NULL; temp = temp->next){
+        unblockProc(temp->PID);
+    }
+    for(temp = MailBoxTable[mbox_id%MAXMBOX].receiveList; temp!=NULL; temp = temp->next){
+        unblockProc(temp->PID);
+    }
+    
+    if(isZapped()){
+        return -3;
+    }
+    
+    // Releasing the mailbox
+    MailBoxTable[mbox_id%MAXMBOX].mboxID=-1;
+    
+    return 0;
+    
+    
+    
     
 }

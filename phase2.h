@@ -53,7 +53,7 @@ extern void             (*sys_vec[])(sysargs *args);
 typedef struct mailLine
 {
   int PID;
-  mailLine next;
-}
+  mailLine * next;
+} mailLine;
 
 #endif
