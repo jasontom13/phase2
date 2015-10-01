@@ -167,7 +167,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         blockMe(mbox_id);
     }
     
-    if(isZapped()){
+    if(MailBoxTable[mbox_id%MAXMBOX].status == INACTIVE){
         return -3;
     }
     
