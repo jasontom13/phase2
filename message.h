@@ -25,6 +25,7 @@ struct mailbox {
     int slotSize;
     slotPtr firstSlot;
     /* a list of processes waiting for slots */
+    int mBoxStatus;
     mailLine * receiveList;
     mailLine * sendList;
 };
