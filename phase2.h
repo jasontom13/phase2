@@ -50,7 +50,7 @@ typedef struct sysargs
 
 extern void             (*sys_vec[])(sysargs *args);
 
-typedef struct mailLine
+typedef struct mailLine mailLine
 {
   int PID;
   mailLine next;

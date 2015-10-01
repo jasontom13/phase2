@@ -28,8 +28,8 @@ struct mailbox {
     int slotSize;
     slotPtr firstSlot;
     /* a list of processes waiting for slots */
-    mailLine receiveList;
-    mailLine sendList;
+    mailLine * receiveList;
+    mailLine * sendList;
 };
 
 struct mailSlot {

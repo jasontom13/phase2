@@ -10,7 +10,9 @@
 #include <phase2.h>
 #include <usloss.h>
 #include "message.h"
-#include "libpatrickphase1.a"
+#include "libpatrickphase1.a"	
+#include <stdio.h>
+#include <stdlib.h>
 
 /* ------------------------- Prototypes ----------------------------------- */
 int start1 (char *);
@@ -213,9 +215,44 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  /* if the process is not able to obtain a message from the appropriate mailbox, block */
  if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
    /* add the current node to the front of the receive wait list */
-   if(MailBoxTable[mbox_id % MAXMBOX].waitList == NULL){
-     MailBoxTable[mbox_id % MAXMBOX].waitList = new
+   MailLine tempMailLine;
+   tempMailLine.PID = getpid();
+   tempMailLine.next = NULL;
+   if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
+     MailBoxTable[mbox_id % MAXMBOX].receiveList = tempMailLine;
+   }else if(MailBoxTable[mbox_id % MAXMBOX].receiveList.nest == NULL){
+     MailBoxTable[mbox_id % MAXMBOX].receiveList.next = tempMailLine;
+   }else{
+     /* find the last MailLine object in line and append */
+     MailLine * last = MailBoxTable[mbox_id % MAXMBOX].receiveList;
+     while(last->next != NULL){
+       last = last->next;
+     }
+     last->next = &tempMailLine;
+   }
+   /* block */
    blockMe(mbox_id);
+ }
+ 
+ 
+ /* else obtain the message */
+
+  void* answer;
+  answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
+  if(answer == NULL) return -1;
+  MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
+  }
+
+  /* unblock process waiting to send, if exists */
+  if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
+  int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
+  MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
+  unblockProc(tempPID);
+ 
+ return msg_size;
+}
+   
+ 
    
 	
  
