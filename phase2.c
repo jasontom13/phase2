@@ -215,7 +215,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  /* if the process is not able to obtain a message from the appropriate mailbox, block */
  if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
    /* add the current node to the front of the receive wait list */
-   mailLine tempMailLine;
+   MailLine tempMailLine;
    tempMailLine.PID = getpid();
    tempMailLine.next = NULL;
    if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
