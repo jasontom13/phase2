@@ -113,6 +113,9 @@ int MboxCreate(int slots, int slot_size)
             MailBoxTable[i%MAXMBOX].usedSlots = 0;
             MailBoxTable[i%MAXMBOX].slotSize =  slot_size>MAX_MESSAGE ? MAX_MESSAGE : slot_size;
             MailBoxTable[i%MAXMBOX].firstSlot = NULL;
+            MailBoxTable[i%MAXMBOX].sendList = NULL;
+            MailBoxTable[i%MAXMBOX].recieveList = NULL;
+            
             return boxID;
         }
     }
@@ -162,12 +165,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     
     slot->nextSlot = &mailSlot;
     
-    // Unblock any processes waiting on receiving a message from the mailbox
-    int i;
-    for(i=0; i<MAXPROC; i++){
-        if(p2procTable[i].status == mbox_id){
-            unblockProc(p2procTable[i].pid);
-        }
+    // Unblock the first process waiting on receiving a message from the mailbox
+    if(MailBoxTable[mbox_id].sendList!=NULL){
+        
     }
     
     
