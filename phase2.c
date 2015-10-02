@@ -233,7 +233,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  // if the arguments passed to the method are invalid, return -1
  if(invalidArgs(mbox_id, msg_size))
     return -1;
- 
  /* disable interrupts */
  disableInterrupts();
  
@@ -260,7 +259,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  }
  
  /* if the mailbox has since been released, return -3 */
-    if(MailBoxTable[mbox_id % MAXMBOX].mBoxStatus){
+    if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
  /* else obtain the message */
 
   void* answer;
@@ -276,11 +275,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
   unblockProc(tempPID);
   }
  return msg_size;
-
-   
- 
-   
-	
  
 } /* MboxReceive */
 
@@ -316,8 +310,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	disableInterrupts();
 	
 	/* test if the mailbox is full */
-	if(MailBoxTable[mbox_id % MAXMBOX].maxSlots == MailBoxTable[mbox_id % MAXMBOX].usedSlots ||
-			(MailBoxTable[mbox_id % MAXMBOX].mBoxStatus == INACTIVE))
+	if(MailBoxTable[mbox_id % MAXMBOX].maxSlots == MailBoxTable[mbox_id % MAXMBOX].usedSlots)
 		return -2;
 	else{
 		/* deposit the message into the mailbox */
@@ -368,8 +361,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 	slotPtr temp;
 
 	/* test if the mailbox is empty */
-	if((MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0) ||
-			(MailBoxTable[mbox_id % MAXMBOX].mBoxStatus == INACTIVE))
+	if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0)
 		return -2;
 	else{
 		temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
@@ -437,5 +429,20 @@ int MboxRelease(int mbox_id)
  // a helper method which checks if the specified id and max size pass muster
 int invalidArgs(int mbox_id, int msg_max_size)
 {
-  
+  if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
+	  return 1;
+  }
+  else if(msg_max_size < MAX_MESSAGE){
+	  return 1;
+  }
+  else
+	  return 0;
+}
+
+extern int waitdevice(int type, int unit, int *status)
+{
+	/* kernel mode test; halt if in user mode */
+		if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+			USLOSS_Halt(1);
+	return 0;
 }
