@@ -31,6 +31,7 @@ int debugflag2 = 0;
 // the mail boxes 
 mailbox MailBoxTable[MAXMBOX];
 int boxID;
+int mBoxOffSet;
 
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
@@ -56,6 +57,7 @@ int start1(char *arg)
 {
     int kid_pid;
     int status;
+    mBoxOffSet = 11;
     
     if (DEBUG2 && debugflag2)
         USLOSS_Console("start1(): at beginning\n");
@@ -500,7 +502,7 @@ extern int waitdevice(int type, int unit, int *status)
 	if(type < USLOSS_CLOCK_DEV || type > USLOSS_TERM_DEV){
 		USLOSS_Halt(1);
 	}
-	MboxReceive(MailBoxTable[(11 + type)%MAXMBOX].mboxID, status, MAX_MESSAGE);
+	MboxReceive(MailBoxTable[(mBoxOffSet + type)%MAXMBOX].mboxID, status, MAX_MESSAGE);
 
 	/* if it was zapped while it was blocked, return -1 */
 	if(isZapped()){
@@ -510,10 +512,29 @@ extern int waitdevice(int type, int unit, int *status)
 	return 0;
 }
 
-void clock_handler(int code, void * dev)
+void clock_handler(int interruptNum, void * unit)
 {
-
-}
+    int status;
+    int valid;
+    // Error checking if the device really is the clock device
+    
+    // Clock Handling Things
+    if(USLOSS_Clock() - readCurStartTime() > 80000){
+        timeSlice();
+    }
+    
+    // Getting the device status register info
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, unit, &status);
+    
+    if (valid != USLOSS_DEV_OK){
+        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
+        USLOSS_Halt(1);
+    }
+    // Conditionally send to clock mailbox every 5th interrupt.
+    if(interruptNum!=0 && interruptNum % 5 == 0){
+        MboxCondSend(USLOSS_CLOCK_DEV+mBoxOffSet, &status, sizeof(int));
+    }
+    }
 
 void disk_handler(int code, void * dev)
 {
