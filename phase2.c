@@ -87,6 +87,13 @@ int start1(char *arg)
     int diskType = MboxCreate(1, MAX_MESSAGE);
     int termType = MboxCreate(1, MAX_MESSAGE);
 
+    // Interrupt Handlers
+    USLOSS_IntVec[USLOSS_CLOCK_INT] = clock_handler;
+	USLOSS_IntVec[USLOSS_ALARM_INT] = alarm_handler;
+    USLOSS_IntVec[USLOSS_DISK_INT] = disk_handler;
+    USLOSS_IntVec[USLOSS_TERM_INT] = term_handler;
+
+
     enableInterrupts();
 
     // Create a process for start2, then block on a join until start2 quits
@@ -515,8 +522,11 @@ void clock_handler(int code, void * dev)
 
 }
 
+// accepts interrupt signals from DIS
 void disk_handler(int code, void * dev)
 {
+
+	/* obtain USLOSS disk device status */
 
 }
 
