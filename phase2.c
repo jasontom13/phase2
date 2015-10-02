@@ -103,6 +103,11 @@ int start1(char *arg)
    ----------------------------------------------------------------------- */
 int MboxCreate(int slots, int slot_size)
 {
+    
+    /* test if in kernel mode; halt if in user mode */
+    if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+        USLOSS_Halt(1);
+    
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
     for(i=boxID; i<boxID+MAXMBOX; i++){
@@ -133,6 +138,11 @@ int MboxCreate(int slots, int slot_size)
    ----------------------------------------------------------------------- */
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
+    
+    /* test if in kernel mode; halt if in user mode */
+    if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+        USLOSS_Halt(1);
+    
     // If inactive mailbox
     if(MailBoxTable[mbox_id%MAXMBOX].mboxID==-1)
         return -1;
@@ -338,6 +348,11 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
  ----------------------------------------------------------------------- */
 int MboxRelease(int mbox_id)
  {
+     
+     /* test if in kernel mode; halt if in user mode */
+     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+         USLOSS_Halt(1);
+     
      // If mailbox not in use
      if(MailBoxTable[mbox_id%MAXMBOX].mboxID == -1)
          return -1;
