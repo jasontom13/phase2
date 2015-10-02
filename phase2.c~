@@ -13,14 +13,13 @@
 #include "libpatrickphase1.a"	
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 
 /* ------------------------- Prototypes ----------------------------------- */
 int start1 (char *);
 extern int start2 (char *);
-int invalidArgs(int mbox_id, int msg_max_size);
 
-/* -------------------------- Globals ---	---------------------------------- */
+
+/* -------------------------- Globals ------------------------------------- */
 
 int debugflag2 = 0;
 
@@ -229,10 +228,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  /* test if in kernel mode; halt if in user mode */
  if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
    USLOSS_Halt(1);
-
- // if the arguments passed to the method are invalid, return -1
- if(invalidArgs(mbox_id, msg_size))
-    return -1;
  
  /* disable interrupts */
  disableInterrupts();
@@ -303,34 +298,14 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet())) 
 		USLOSS_Halt(1);
 
-	// if the arguments passed to the method are invalid, return -1
-	if(invalidArgs(mbox_id, msg_size))
-	   return -1;
 	// if the process is zapped, return -3
 	if(isZapped()){
 		USLOSS_Console("Process has been zapped\n");
-		return -3;
-	}
+		return(-3);
 	
 	/* disable interrupts */
 	disableInterrupts();
-	
-	/* test if the mailbox is full */
-	if(MailBoxTable[mbox_id % MAXMBOX].maxSlots == MailBoxTable[mbox_id % MAXMBOX].usedSlots ||
-			(MailBoxTable[mbox_id % MAXMBOX].mBoxStatus == INACTIVE))
-		return -2;
-	else{
-		/* deposit the message into the mailbox */
-		slotPtr temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
-		for(; temp->nextSlot != NULL; temp = temp->nextSlot);
-		mailSlot newSlot;
-		newSlot.message = msg_ptr;
-		newSlot.mboxID = mbox_id;
-		newSlot.nextSlot = NULL;
-		temp->nextSlot = newSlot;
-		MailBoxTable[mbox_id % MAXMBOX].usedSlots++;
-	}
-	return 0;
+
 }
 
 /* returns 0 if successful, 1 if no msg available, -1 if illegal args */
@@ -349,41 +324,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
  ----------------------------------------------------------------------- */
 int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 {
-	/* kernel mode test; halt if in user mode */
-	if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
-		USLOSS_Halt(1);
-
-	// if the arguments passed to the method are invalid, return -1
-	if(invalidArgs(mbox_id, msg_max_size))
-	   return -1;
-	// if the process is zapped, return -3
-	if(isZapped()){
-		USLOSS_Console("Process has been zapped\n");
-		return -3;
-	}
-
-	/* disable interrupts */
-	disableInterrupts();
-
-	slotPtr temp;
-
-	/* test if the mailbox is empty */
-	if((MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0) ||
-			(MailBoxTable[mbox_id % MAXMBOX].mBoxStatus == INACTIVE))
-		return -2;
-	else{
-		temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
-		/* if the size of the message stored in the slot is too large, return -1 */
-		if(temp->msg_size > msg_max_size){
-			return -1;
-		}
-		/* copy the message */
-		msg_ptr = temp.message;
-		/* "free" the slot in the mailbox */
-		MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
-		MailBoxTable[mbox_id % MAXMBOX].usedSlots--;
-	}
-	return temp.msg_size;
+    
 }
 
 /* ------------------------------------------------------------------------
@@ -408,7 +349,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
  Side Effects - none.
  ----------------------------------------------------------------------- */
 int MboxRelease(int mbox_id)
-{
+ {
      // If mailbox not in use
      if(MailBoxTable[mbox_id%MAXMBOX].mboxID == -1)
          return -1;
@@ -424,7 +365,7 @@ int MboxRelease(int mbox_id)
          unblockProc(temp->PID);
      }
      
-     if(isZapped()){ 
+     if(isZapped()){
          return -3;
      }
      
@@ -432,10 +373,8 @@ int MboxRelease(int mbox_id)
      MailBoxTable[mbox_id%MAXMBOX].mboxID=-1;
      
      return 0;
-}
-
- // a helper method which checks if the specified id and max size pass muster
-int invalidArgs(int mbox_id, int msg_max_size)
-{
-  
-}
+     
+     
+     
+     
+ }
