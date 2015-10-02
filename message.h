@@ -6,8 +6,7 @@
 
 #define MAXHANDLERS 1
 
-#define INACTIVE 0
-#define ACTIVE 1
+#define INACTIVE -1
 
 
 typedef struct mailSlot mailSlot;
@@ -25,7 +24,6 @@ struct mailbox {
     int slotSize;
     slotPtr firstSlot;
     /* a list of processes waiting for slots */
-    int mBoxStatus;
     mailLine * receiveList;
     mailLine * sendList;
 };

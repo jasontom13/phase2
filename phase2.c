@@ -64,7 +64,7 @@ int start1(char *arg)
     // Initialize the mail box table, slots, & other data structures.
     int iter = 0;
     for(;iter < MAXMBOX; iter++){
-      MailBoxTable[iter].mboxID = -1;
+      MailBoxTable[iter].mboxID = INACTIVE;
     }
     
     for(iter=0;iter < MAXPROC; iter++){
@@ -121,7 +121,6 @@ int MboxCreate(int slots, int slot_size)
             MailBoxTable[i%MAXMBOX].firstSlot = NULL;
             MailBoxTable[i%MAXMBOX].sendList = NULL;
             MailBoxTable[i%MAXMBOX].receiveList = NULL;
-            MailBoxTable[i%MAXMBOX].mBoxStatus = ACTIVE;
             return boxID;
         }
     }
@@ -178,8 +177,8 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         blockMe(mbox_id);
     }
     
-
-    if(MailBoxTable[mbox_id%MAXMBOX].mBoxStatus == INACTIVE){
+    // Check if the mailbox had been released
+    if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
         return -3;
     }
 
@@ -191,7 +190,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     memcpy(mailSlot.message, msg_ptr, msg_size);
     mailSlot.mboxID = mbox_id;
     mailSlot.nextSlot = NULL;
-    mailSlot.status = ACTIVE;
     
     slot->nextSlot = &mailSlot;
     
@@ -425,10 +423,8 @@ int MboxRelease(int mbox_id)
          USLOSS_Halt(1);
 
      // If mailbox not in use
-     if(MailBoxTable[mbox_id%MAXMBOX].mboxID == -1)
+     if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE)
          return -1;
-     
-     MailBoxTable[mbox_id%MAXMBOX].mBoxStatus = INACTIVE;
      
      // Zapping all blocked processes on mailbox DOES NOT WORK
      mailLine * temp;
@@ -444,7 +440,7 @@ int MboxRelease(int mbox_id)
      }
      
      // Releasing the mailbox
-     MailBoxTable[mbox_id%MAXMBOX].mboxID=-1;
+     MailBoxTable[mbox_id%MAXMBOX].mboxID=INACTIVE;
      
      return 0;
 }
