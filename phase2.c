@@ -19,6 +19,10 @@
 int start1 (char *);
 extern int start2 (char *);
 int invalidArgs(int mbox_id, int msg_max_size);
+void clock_handler(int code, void * dev);
+void disk_handler(int code, void * dev);
+void term_handler(int code, void * dev);
+void alarm_handler(int code, void * dev);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -504,4 +508,24 @@ extern int waitdevice(int type, int unit, int *status)
 	}
 
 	return 0;
+}
+
+void clock_handler(int code, void * dev)
+{
+
+}
+
+void disk_handler(int code, void * dev)
+{
+
+}
+
+void term_handler(int code, void * dev)
+{
+
+}
+
+void alarm_handler(int code, void * dev)
+{
+
 }
