@@ -34,6 +34,7 @@ struct mailSlot {
     int       mboxID;
     int       status;
     // other items as needed...
+    int msg_size;
     void * message;
     slotPtr nextSlot;
 };
