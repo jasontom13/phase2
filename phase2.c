@@ -20,8 +20,8 @@ int start1 (char *);
 extern int start2 (char *);
 int invalidArgs(int mbox_id, int msg_max_size);
 void clock_handler(int code, void * dev);
-void disk_handler(int code, void * dev);
-void term_handler(int code, void * dev);
+void disk_handler(int code, int dev);
+void term_handler(int code, int dev);
 void alarm_handler(int code, void * dev);
 
 /* -------------------------- Globals ---	---------------------------------- */
@@ -86,8 +86,12 @@ int start1(char *arg)
     // allocate mailboxes for interrupt handlers.  Etc... 
     int clockType = MboxCreate(1, MAX_MESSAGE);
     int alarmType = MboxCreate(1, MAX_MESSAGE);
-    int diskType = MboxCreate(1, MAX_MESSAGE);
-    int termType = MboxCreate(1, MAX_MESSAGE);
+    int diskZero = MboxCreate(1, MAX_MESSAGE);
+    int diskOne = MboxCreate(1, MAX_MESSAGE);
+    int termZero = MboxCreate(1, MAX_MESSAGE);
+    int termOne = MboxCreate(1, MAX_MESSAGE);
+    int termTwo = MboxCreate(1, MAX_MESSAGE);
+    int termThree = MboxCreate(1, MAX_MESSAGE);
 
     // Interrupt Handlers
     USLOSS_IntVec[USLOSS_CLOCK_INT] = clock_handler;
@@ -546,14 +550,46 @@ void clock_handler(int interruptNum, void * unit)
 // accepts interrupt signals from DIS
 void disk_handler(int code, void * dev)
 {
-
-	/* obtain USLOSS disk device status */
-
+	void * stats;
+	/* obtain terminal status register */
+	USLOSS_DeviceInput(USLOSS_DISK_DEV, dev, stats);
+	/* write the terminal status register to the correct mailbox */
+	switch(dev){
+		/* write to the appropriate mailbox and wake up any waiting processes */
+		case 0:
+			MboxCondSend(DISKZEROMBOX, stats, 1);
+			break;
+		case 1:
+			MboxCondSend(DISKONEMBOX, stats, 1);
+			break;
+		default:
+			USLOSS_Halt(1);
+	}
 }
 
-void term_handler(int code, void * dev)
+void term_handler(int code, int dev)
 {
-
+	void * stats;
+	/* obtain terminal status register */
+	USLOSS_DeviceInput(USLOSS_TERM_DEV, dev, stats);
+	/* write the terminal status register to the correct mailbox */
+	switch(dev){
+		/* write to the appropriate mailbox and wake up any waiting processes */
+		case 0:
+			MboxCondSend(TERMZEROMBOX, stats, 1);
+			break;
+		case 1:
+			MboxCondSend(TERMONEMBOX, stats, 1);
+			break;
+		case 2:
+			MboxCondSend(TERMTWOMBOX, stats, 1);
+			break;
+		case 3:
+			MboxCondSend(TERMTHREEMBOX, stats, 1);
+			break;
+		default:
+			USLOSS_Halt(1);
+	}
 }
 
 void alarm_handler(int code, void * dev)

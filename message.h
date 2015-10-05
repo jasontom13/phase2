@@ -4,6 +4,13 @@
 #define TRUE 1
 #define FALSE 0
 
+#define DISKZEROMBOX 13
+#define DISKONEMBOX 14
+#define TERMZEROMBOX 15
+#define TERMONEMBOX 16
+#define TERMTWOMBOX 17
+#define TERMTHREEMBOX 18
+
 #define MAXHANDLERS 1
 
 #define INACTIVE -1
