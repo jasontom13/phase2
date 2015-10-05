@@ -30,7 +30,7 @@ void finish();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 0;
+int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -76,6 +76,7 @@ int start1(char *arg)
     int iter = 0;
     for(;iter < MAXMBOX; iter++){
       MailBoxTable[iter].mboxID = INACTIVE;
+        MailBoxTable[iter].firstSlot = NULL;
     }
     
     for(iter=0;iter < MAXPROC; iter++){
@@ -89,7 +90,6 @@ int start1(char *arg)
     // Initialize USLOSS_IntVec and system call handlers,
 
     // allocate mailboxes for interrupt handlers.  Etc... 
-    MboxCreate(1, MAX_MESSAGE);
     MboxCreate(1, MAX_MESSAGE);
     MboxCreate(1, MAX_MESSAGE);
     MboxCreate(1, MAX_MESSAGE);
@@ -165,6 +165,9 @@ int MboxCreate(int slots, int slot_size)
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
     
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): starting\n");
+    
     disableInterrupts();
     /* test if in kernel mode; halt if in user mode */
     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
@@ -211,14 +214,23 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
     // Adding message to slot in mailbox
     slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
-    for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
+    if(slot!=NULL){
+        for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
+    }
+    else{
+        mailSlot temp;
+        slot = &temp;
+    }
+
     
     mailSlot mailSlot;
     memcpy(mailSlot.message, msg_ptr, msg_size);
+
     mailSlot.mboxID = mbox_id;
     mailSlot.nextSlot = NULL;
     
     slot->nextSlot = &mailSlot;
+
     
     // Unblock any processes waiting on receiving a message from the mailbox
     if(MailBoxTable[mbox_id%MAXMBOX].sendList!=NULL){
@@ -354,7 +366,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 		slotPtr temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
 		for(; temp->nextSlot != NULL; temp = temp->nextSlot);
 		mailSlot newSlot;
-		newSlot.message = msg_ptr;
+        memcpy(newSlot.message, msg_ptr, msg_size);
 		newSlot.mboxID = mbox_id;
 		newSlot.nextSlot = NULL;
 		temp->nextSlot = &newSlot;

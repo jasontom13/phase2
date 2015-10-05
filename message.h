@@ -41,7 +41,7 @@ struct mailSlot {
     int       status;
     // other items as needed...
     int msg_size;
-    void * message;
+    char message [MAX_MESSAGE];
     slotPtr nextSlot;
 };
 
