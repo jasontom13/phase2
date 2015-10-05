@@ -26,6 +26,7 @@ void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
+void finish();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -138,7 +139,7 @@ int MboxCreate(int slots, int slot_size)
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
     for(i=boxID; i<boxID+MAXMBOX; i++){
-        if(MailBoxTable[i%MAXMBOX].mboxID!=-1){
+        if(MailBoxTable[i%MAXMBOX].mboxID==-1){
             boxID=i;
             MailBoxTable[i%MAXMBOX].mboxID = boxID;
             MailBoxTable[i%MAXMBOX].maxSlots = slots;
@@ -638,3 +639,4 @@ void enableInterrupts()
     /* We ARE in kernel mode */
         USLOSS_PsrSet( USLOSS_PsrGet() | USLOSS_PSR_CURRENT_INT );
 } /* enableInterrupts */
+
