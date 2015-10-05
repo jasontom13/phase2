@@ -540,7 +540,7 @@ void clock_handler(int interruptNum, void * unit)
     }
     
     // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (int) unit, &status);
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
     
     if (valid != USLOSS_DEV_OK){
         USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
@@ -557,9 +557,9 @@ void disk_handler(int code, void * dev)
 {
     void * stats = NULL;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_DISK_DEV, (int) dev, stats);
+	USLOSS_DeviceInput(USLOSS_DISK_DEV, (long) dev, stats);
 	/* write the terminal status register to the correct mailbox */
-	switch((int) dev){
+	switch((long) dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
 			MboxCondSend(DISKZEROMBOX, stats, 1);
@@ -576,9 +576,9 @@ void term_handler(int code, void * dev)
 {
     void * stats = NULL;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_TERM_DEV, (int)dev, stats);
+	USLOSS_DeviceInput(USLOSS_TERM_DEV, (long)dev, stats);
 	/* write the terminal status register to the correct mailbox */
-	switch((int)dev){
+	switch((long)dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
 			MboxCondSend(TERMZEROMBOX, stats, 1);
