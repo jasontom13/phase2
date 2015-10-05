@@ -26,7 +26,6 @@ void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
-void finish();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -34,7 +33,7 @@ int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
-mailbox MailBoxTable[MAXMBOX];
+struct mailbox MailBoxTable[MAXMBOX];
 int boxID;
 
 // also need array of mail slots, array of function ptrs to system call 
@@ -597,23 +596,24 @@ void disk_handler(int code, void * dev)
 /* handler for terminal interrupts */
 void term_handler(int code, void * dev)
 {
-    void * stats = NULL;
+    int stats;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_TERM_DEV, (long)dev, stats);
+	USLOSS_DeviceInput(USLOSS_TERM_DEV, (long)dev, &stats);
+	stats = USLOSS_TERM_STAT_CHAR(stats);
 	/* write the terminal status register to the correct mailbox */
 	switch((long)dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
-			MboxCondSend(TERMZEROMBOX, USLOSS_TERM_CHAR(stats), 1);
+			MboxCondSend(TERMZEROMBOX, &stats, 1);
 			break;
 		case 1:
-			MboxCondSend(TERMONEMBOX, USLOSS_TERM_CHAR(stats), 1);
+			MboxCondSend(TERMONEMBOX, &stats, 1);
 			break;
 		case 2:
-			MboxCondSend(TERMTWOMBOX, USLOSS_TERM_CHAR(stats), 1);
+			MboxCondSend(TERMTWOMBOX, &stats, 1);
 			break;
 		case 3:
-			MboxCondSend(TERMTHREEMBOX, USLOSS_TERM_CHAR(stats), 1);
+			MboxCondSend(TERMTHREEMBOX, &stats, 1);
 			break;
 		default:
 			USLOSS_Halt(1);
