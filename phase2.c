@@ -174,7 +174,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         USLOSS_Halt(1);
     
     // If inactive mailbox
-    if(MailBoxTable[mbox_id%MAXMBOX].mboxID==-1)
+    if(MailBoxTable[mbox_id%MAXMBOX].mboxID==INACTIVE)
         return -1;
     // If message size too big
     if(MailBoxTable[mbox_id%MAXMBOX].slotSize<msg_size)
@@ -212,11 +212,19 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         return -3;
     }
     
+    // Create a new mailSlot
     mailSlot mailSlot;
     memcpy(mailSlot.message, msg_ptr, msg_size);
     mailSlot.msg_size = msg_size;
     mailSlot.mboxID = mbox_id;
     mailSlot.nextSlot = NULL;
+    
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): adding message: %s\n", mailSlot.message);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): message is size: %d\n", mailSlot.msg_size);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): sending to mailbox id: %d\n", mbox_id);
 
     // Adding message to slot in mailbox
     slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
@@ -231,14 +239,22 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 
     
     // Unblock any processes waiting on receiving a message from the mailbox
-    if(MailBoxTable[mbox_id%MAXMBOX].sendList!=NULL){
-        unblockProc(MailBoxTable[mbox_id%MAXMBOX].sendList->PID);
-        MailBoxTable[mbox_id%MAXMBOX].sendList = MailBoxTable[mbox_id%MAXMBOX].sendList->next;
+    if(MailBoxTable[mbox_id%MAXMBOX].receiveList!=NULL){
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
+        unblockProc(MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
+        MailBoxTable[mbox_id%MAXMBOX].receiveList = MailBoxTable[mbox_id%MAXMBOX].receiveList->next;
     }
     // Increment amount of total system slots used
     slotsUsed++;
     
     enableInterrupts();
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): sent message: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): sent message: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxSend(): sent message size: %d\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
     
     return 0;
     
@@ -270,68 +286,88 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
+    
+    if (DEBUG2 && debugflag2){
+        USLOSS_Console("MboxReceive(): checking Mailbox id: %d\n", mbox_id);
+    }
+    
     int recMsgSize;
     if (DEBUG2 && debugflag2)
         USLOSS_Console("MboxReceive(): starting\n");
- /* test if in kernel mode; halt if in user mode */
- if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
-   USLOSS_Halt(1);
-
- // if the arguments passed to the method are invalid, return -1
- if(invalidArgs(mbox_id, msg_size))
-    return -1;
- /* disable interrupts */
- disableInterrupts();
- 
- /* if the process is not able to obtain a message from the appropriate mailbox, block */
- if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
-   /* add the current node to the front of the receive wait list */
-   mailLine tempMailLine;
-   tempMailLine.PID = getpid();
-   tempMailLine.next = NULL;
-   if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
-     MailBoxTable[mbox_id % MAXMBOX].receiveList = &tempMailLine;
-   }else if(MailBoxTable[mbox_id % MAXMBOX].receiveList->next == NULL){
-     MailBoxTable[mbox_id % MAXMBOX].receiveList->next = &tempMailLine;
-   }else{
-     /* find the last MailLine object in line and append */
-     mailLine * last = MailBoxTable[mbox_id % MAXMBOX].receiveList;
-     while(last->next != NULL){
-       last = last->next;
-     }
-     last->next = &tempMailLine;
-   }
-   /* block */
-   blockMe(BLOCKMECONSTANT);
- }
- 
- /* if the mailbox has since been released, return -3 */
+    /* test if in kernel mode; halt if in user mode */
+    if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+        USLOSS_Halt(1);
+    
+    // if the arguments passed to the method are invalid, return -1
+    if(invalidArgs(mbox_id, msg_size))
+        return -1;
+    /* disable interrupts */
+    disableInterrupts();
+    
+    /* if the process is not able to obtain a message from the appropriate mailbox, block */
+    if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxReceive(): No messages available, blocking.\n");
+        /* add the current node to the front of the receive wait list */
+        mailLine tempMailLine;
+        tempMailLine.PID = getpid();
+        tempMailLine.next = NULL;
+        if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
+            MailBoxTable[mbox_id % MAXMBOX].receiveList = &tempMailLine;
+        }else if(MailBoxTable[mbox_id % MAXMBOX].receiveList->next == NULL){
+            MailBoxTable[mbox_id % MAXMBOX].receiveList->next = &tempMailLine;
+        }else{
+            /* find the last MailLine object in line and append */
+            mailLine * last = MailBoxTable[mbox_id % MAXMBOX].receiveList;
+            while(last->next != NULL){
+                last = last->next;
+            }
+            last->next = &tempMailLine;
+        }
+        /* block */
+        blockMe(BLOCKMECONSTANT);
+    }
+    if (DEBUG2 && debugflag2){
+        USLOSS_Console("MboxReceive(): checking Mailbox id: %d\n", mbox_id);
+    }
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): getting message1: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): getting message2: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): getting message size: %d\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): getting message3: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    
+    
+    /* if the mailbox has since been released, return -3 */
     if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
         return -3;
     }
-     /* else obtain the message */
+    /* else obtain the message */
+
     else{
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxReceive(): get message: %s\n", MailBoxTable[mbox_id % MAXMBOX].firstSlot->message);
-  void* answer;
+        void* answer;
         recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
-  answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
-  if(answer == NULL) return -1;
+        answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
+        
+        if(answer == NULL) return -1;
         if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
             MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
         }
         else{
             MailBoxTable[mbox_id % MAXMBOX].firstSlot = NULL;
         }
-  }
-
-  /* unblock process waiting to send, if exists */
-  if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
-  int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
-  MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
-  unblockProc(tempPID);
-  }
- return recMsgSize;
+        MailBoxTable[mbox_id % MAXMBOX].usedSlots--;
+    }
+    
+    /* unblock process waiting to send, if exists */
+    if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
+        int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
+        MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
+        unblockProc(tempPID);
+    }
+    return recMsgSize;
  
 } /* MboxReceive */
 
