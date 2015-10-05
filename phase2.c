@@ -211,25 +211,23 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
         return -3;
     }
+    
+    mailSlot mailSlot;
+    memcpy(mailSlot.message, msg_ptr, msg_size);
+    
+    mailSlot.mboxID = mbox_id;
+    mailSlot.nextSlot = NULL;
 
     // Adding message to slot in mailbox
     slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
     if(slot!=NULL){
         for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
+        slot->nextSlot = &mailSlot;
     }
     else{
-        mailSlot temp;
-        slot = &temp;
+        MailBoxTable[mbox_id%MAXMBOX].firstSlot = &mailSlot;
     }
-
-    
-    mailSlot mailSlot;
-    memcpy(mailSlot.message, msg_ptr, msg_size);
-
-    mailSlot.mboxID = mbox_id;
-    mailSlot.nextSlot = NULL;
-    
-    slot->nextSlot = &mailSlot;
+    MailBoxTable[mbox_id%MAXMBOX].usedSlots++;
 
     
     // Unblock any processes waiting on receiving a message from the mailbox
@@ -241,7 +239,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     slotsUsed++;
     
     enableInterrupts();
-    
     
     return 0;
     
@@ -273,6 +270,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
+    
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): starting\n");
  /* test if in kernel mode; halt if in user mode */
  if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
    USLOSS_Halt(1);
@@ -307,12 +307,21 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
  
  /* if the mailbox has since been released, return -3 */
     if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
- /* else obtain the message */
-
+        return -3;
+    }
+     /* else obtain the message */
+    else{
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxReceive(): get message: %s\n", MailBoxTable[mbox_id % MAXMBOX].firstSlot->message);
   void* answer;
   answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
   if(answer == NULL) return -1;
-  MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
+        if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
+            MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
+        }
+        else{
+            MailBoxTable[mbox_id % MAXMBOX].firstSlot = NULL;
+        }
   }
 
   /* unblock process waiting to send, if exists */
@@ -491,7 +500,7 @@ int invalidArgs(int mbox_id, int msg_max_size)
   if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
 	  return 1;
   }
-  else if(msg_max_size < MAX_MESSAGE){
+  else if(msg_max_size > MAX_MESSAGE){
 	  return 1;
   }
   else
