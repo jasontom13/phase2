@@ -6,14 +6,14 @@
 
    ------------------------------------------------------------------------ */
 
-#include <phase1.h>
-#include <phase2.h>
-#include <usloss.h>
+#include "phase1.h"
+#include "phase2.h"
+#include "usloss.h"
 #include "message.h"
-#include "libpatrickphase1.a"	
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <string.h>
 
 /* ------------------------- Prototypes ----------------------------------- */
 int start1 (char *);
@@ -21,9 +21,11 @@ extern int start2 (char *);
 int invalidArgs(int mbox_id, int msg_max_size);
 void clock_handler(int code, void * dev);
 void disk_handler(int code, void * dev);
-void term_handler(int code, int dev);
+void term_handler(int code, void * dev);
 void wakeUpReceive(int mbox_id);
 int check_io(void);
+void disableInterrupts();
+void enableInterrupts();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -63,7 +65,9 @@ int start1(char *arg)
     if (DEBUG2 && debugflag2)
         USLOSS_Console("start1(): at beginning\n");
 
-    check_kernel_mode("start1");
+    /* test if in kernel mode; halt if in user mode */
+    if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+        USLOSS_Halt(1);
 
     // Disable interrupts
     disableInterrupts();
@@ -85,14 +89,14 @@ int start1(char *arg)
     // Initialize USLOSS_IntVec and system call handlers,
 
     // allocate mailboxes for interrupt handlers.  Etc... 
-    int clockType = MboxCreate(1, MAX_MESSAGE);
-    int alarmType = MboxCreate(1, MAX_MESSAGE);
-    int diskZero = MboxCreate(1, MAX_MESSAGE);
-    int diskOne = MboxCreate(1, MAX_MESSAGE);
-    int termZero = MboxCreate(1, MAX_MESSAGE);
-    int termOne = MboxCreate(1, MAX_MESSAGE);
-    int termTwo = MboxCreate(1, MAX_MESSAGE);
-    int termThree = MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
+    MboxCreate(1, MAX_MESSAGE);
 
     // Interrupt Handlers
     USLOSS_IntVec[USLOSS_CLOCK_INT] = clock_handler;
@@ -182,7 +186,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
         
-        mailLine * new;
+        mailLine * new = NULL;
         new->PID = getpid();
         new->next = NULL;
         mailLine * temp = MailBoxTable[mbox_id%MAXMBOX].sendList;
@@ -551,7 +555,7 @@ void clock_handler(int interruptNum, void * unit)
 // accepts interrupt signals from DIS
 void disk_handler(int code, void * dev)
 {
-	void * stats;
+    void * stats = NULL;
 	/* obtain terminal status register */
 	USLOSS_DeviceInput(USLOSS_DISK_DEV, (int) dev, stats);
 	/* write the terminal status register to the correct mailbox */
@@ -568,13 +572,13 @@ void disk_handler(int code, void * dev)
 	}
 }
 
-void term_handler(int code, int dev)
+void term_handler(int code, void * dev)
 {
-	void * stats;
+    void * stats = NULL;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_TERM_DEV, dev, stats);
+	USLOSS_DeviceInput(USLOSS_TERM_DEV, (int)dev, stats);
 	/* write the terminal status register to the correct mailbox */
-	switch(dev){
+	switch((int)dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
 			MboxCondSend(TERMZEROMBOX, stats, 1);
@@ -602,3 +606,35 @@ int check_io(void){
     }
     return 0;
 }
+
+/*
+ * Disables the interrupts.
+ */
+void disableInterrupts()
+{
+    /* turn the interrupts OFF iff we are in kernel mode */
+    if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+        //not in kernel mode
+        USLOSS_Console("Kernel Error: Not in kernel mode, may not ");
+        USLOSS_Console("disable interrupts\n");
+        USLOSS_Halt(1);
+    } else
+    /* We ARE in kernel mode */
+        USLOSS_PsrSet( USLOSS_PsrGet() & ~USLOSS_PSR_CURRENT_INT );
+} /* disableInterrupts */
+
+/*
+ * Enables the interrupts.
+ */
+void enableInterrupts()
+{
+    /* turn the interrupts ON iff we are in kernel mode */
+    if( (USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()) == 0 ) {
+        //not in kernel mode
+        USLOSS_Console("Kernel Error: Not in kernel mode, may not ");
+        USLOSS_Console("enable interrupts\n");
+        USLOSS_Halt(1);
+    } else
+    /* We ARE in kernel mode */
+        USLOSS_PsrSet( USLOSS_PsrGet() | USLOSS_PSR_CURRENT_INT );
+} /* enableInterrupts */
