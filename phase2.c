@@ -243,18 +243,18 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
         unblockProc(MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): after unblockproc\n");
         MailBoxTable[mbox_id%MAXMBOX].receiveList = MailBoxTable[mbox_id%MAXMBOX].receiveList->next;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): nexxxttt\n");
     }
     // Increment amount of total system slots used
     slotsUsed++;
     
     enableInterrupts();
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): sent message: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): sent message: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): sent message size: %d\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+    
+    
     
     return 0;
     
@@ -286,10 +286,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
-    
-    if (DEBUG2 && debugflag2){
-        USLOSS_Console("MboxReceive(): checking Mailbox id: %d\n", mbox_id);
-    }
     
     int recMsgSize;
     if (DEBUG2 && debugflag2)
@@ -330,24 +326,30 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     if (DEBUG2 && debugflag2){
         USLOSS_Console("MboxReceive(): checking Mailbox id: %d\n", mbox_id);
     }
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxReceive(): getting message1: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxReceive(): getting message2: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxReceive(): getting message size: %d\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxReceive(): getting message3: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxReceive(): getting message1: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxReceive(): getting message2: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxReceive(): getting message size: %d\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxReceive(): getting message3: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
     
     
     /* if the mailbox has since been released, return -3 */
     if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
         return -3;
     }
+    
+    
     /* else obtain the message */
-
     else{
         void* answer;
+//        if (DEBUG2 && debugflag2){
+//            USLOSS_Console("MboxReceive(): checking Mailbox id: %d\n", mbox_id);
+//        }
+//        if (DEBUG2 && debugflag2)
+//            USLOSS_Console("MboxReceive(): getting message1: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
         recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
         answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
         
