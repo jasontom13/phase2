@@ -42,7 +42,6 @@ int boxID;
 procStruct p2procTable[MAXPROC];
 int slotsUsed;
 
-mailSlot slottyArray[MAXSLOTS];
 interruptHandler intTable[MAXHANDLERS];
 
 
@@ -237,11 +236,12 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     // Increment amount of total system slots used
     slotsUsed++;
     
+    if (DEBUG2 && debugflag2){
+    	USLOSS_Console("The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+    	USLOSS_Console("A second time: The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+    }
     enableInterrupts();
-    
     return 0;
-    
-    
     
     /*Check for possible errors (message size too large, inactive mailbox id, etc.).
      • Return -1 if errors are found.
@@ -269,68 +269,72 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
-    int recMsgSize;
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxReceive(): starting\n");
- /* test if in kernel mode; halt if in user mode */
- if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
-   USLOSS_Halt(1);
+	int recMsgSize;
+	if (DEBUG2 && debugflag2){
+		USLOSS_Console("MboxReceive(): starting\n");
+		USLOSS_Console("The message being fetched from mbox ID %d is \"%s\" with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+	}
 
- // if the arguments passed to the method are invalid, return -1
- if(invalidArgs(mbox_id, msg_size))
-    return -1;
- /* disable interrupts */
- disableInterrupts();
- 
- /* if the process is not able to obtain a message from the appropriate mailbox, block */
- if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
-   /* add the current node to the front of the receive wait list */
-   mailLine tempMailLine;
-   tempMailLine.PID = getpid();
-   tempMailLine.next = NULL;
-   if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
-     MailBoxTable[mbox_id % MAXMBOX].receiveList = &tempMailLine;
-   }else if(MailBoxTable[mbox_id % MAXMBOX].receiveList->next == NULL){
-     MailBoxTable[mbox_id % MAXMBOX].receiveList->next = &tempMailLine;
-   }else{
-     /* find the last MailLine object in line and append */
-     mailLine * last = MailBoxTable[mbox_id % MAXMBOX].receiveList;
-     while(last->next != NULL){
-       last = last->next;
-     }
-     last->next = &tempMailLine;
-   }
-   /* block */
-   blockMe(BLOCKMECONSTANT);
- }
- 
- /* if the mailbox has since been released, return -3 */
-    if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
-        return -3;
-    }
-     /* else obtain the message */
-    else{
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxReceive(): get message: %s\n", MailBoxTable[mbox_id % MAXMBOX].firstSlot->message);
-  void* answer;
-        recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
-  answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
-  if(answer == NULL) return -1;
-        if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
-            MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
-        }
-        else{
-            MailBoxTable[mbox_id % MAXMBOX].firstSlot = NULL;
-        }
-  }
+	/* test if in kernel mode; halt if in user mode */
+	if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+		USLOSS_Halt(1);
 
-  /* unblock process waiting to send, if exists */
-  if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
-  int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
-  MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
-  unblockProc(tempPID);
-  }
- return recMsgSize;
+	// if the arguments passed to the method are invalid, return -1
+	if(invalidArgs(mbox_id, msg_size))
+		return -1;
+	/* disable interrupts */
+	disableInterrupts();
+
+	/* if the process is not able to obtain a message from the appropriate mailbox, block */
+	if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0){
+		/* add the current node to the front of the receive wait list */
+		mailLine tempMailLine;
+		tempMailLine.PID = getpid();
+		tempMailLine.next = NULL;
+		if(MailBoxTable[mbox_id % MAXMBOX].receiveList == NULL){
+			MailBoxTable[mbox_id % MAXMBOX].receiveList = &tempMailLine;
+		}else if(MailBoxTable[mbox_id % MAXMBOX].receiveList->next == NULL){
+			MailBoxTable[mbox_id % MAXMBOX].receiveList->next = &tempMailLine;
+		}else{
+			/* find the last MailLine object in line and append */
+			mailLine * last = MailBoxTable[mbox_id % MAXMBOX].receiveList;
+			while(last->next != NULL){
+			last = last->next;
+			}
+			last->next = &tempMailLine;
+		}
+		/* block */
+		blockMe(BLOCKMECONSTANT);
+	}
+
+	/* if the mailbox has since been released, return -3 */
+	if(MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
+
+	}
+	/* else obtain the message */
+	else{
+		if (DEBUG2 && debugflag2)
+		USLOSS_Console("MboxReceive(): get message: %s\n", MailBoxTable[mbox_id % MAXMBOX].firstSlot->message);
+		void* answer;
+		recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
+		answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
+		if(answer == NULL)
+			return -1;
+		if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
+			MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
+		}
+		else{
+			MailBoxTable[mbox_id % MAXMBOX].firstSlot = NULL;
+		}
+	}
+
+	/* unblock process waiting to send, if exists */
+	if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
+		int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
+		MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
+		unblockProc(tempPID);
+	}
+	return recMsgSize;
  
 } /* MboxReceive */
 
