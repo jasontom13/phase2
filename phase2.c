@@ -214,7 +214,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     
     mailSlot mailSlot;
     memcpy(mailSlot.message, msg_ptr, msg_size);
-    
+    mailSlot.msg_size = msg_size;
     mailSlot.mboxID = mbox_id;
     mailSlot.nextSlot = NULL;
 
@@ -270,7 +270,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
-    
+    int recMsgSize;
     if (DEBUG2 && debugflag2)
         USLOSS_Console("MboxReceive(): starting\n");
  /* test if in kernel mode; halt if in user mode */
@@ -314,6 +314,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxReceive(): get message: %s\n", MailBoxTable[mbox_id % MAXMBOX].firstSlot->message);
   void* answer;
+        recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
   answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
   if(answer == NULL) return -1;
         if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
@@ -330,7 +331,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
   MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
   unblockProc(tempPID);
   }
- return msg_size;
+ return recMsgSize;
  
 } /* MboxReceive */
 
