@@ -573,7 +573,7 @@ void clock_handler(int interruptNum, void * unit)
     }
     }
 
-// accepts interrupt signals from DIS
+// accepts interrupt signals from DISK device
 void disk_handler(int code, void * dev)
 {
     void * stats = NULL;
@@ -593,6 +593,7 @@ void disk_handler(int code, void * dev)
 	}
 }
 
+/* handler for terminal interrupts */
 void term_handler(int code, void * dev)
 {
     void * stats = NULL;
@@ -602,16 +603,16 @@ void term_handler(int code, void * dev)
 	switch((long)dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
-			MboxCondSend(TERMZEROMBOX, stats, 1);
+			MboxCondSend(TERMZEROMBOX, USLOSS_TERM_CHAR(stats), 1);
 			break;
 		case 1:
-			MboxCondSend(TERMONEMBOX, stats, 1);
+			MboxCondSend(TERMONEMBOX, USLOSS_TERM_CHAR(stats), 1);
 			break;
 		case 2:
-			MboxCondSend(TERMTWOMBOX, stats, 1);
+			MboxCondSend(TERMTWOMBOX, USLOSS_TERM_CHAR(stats), 1);
 			break;
 		case 3:
-			MboxCondSend(TERMTHREEMBOX, stats, 1);
+			MboxCondSend(TERMTHREEMBOX, USLOSS_TERM_CHAR(stats), 1);
 			break;
 		default:
 			USLOSS_Halt(1);
