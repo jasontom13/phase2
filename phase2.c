@@ -20,9 +20,10 @@ int start1 (char *);
 extern int start2 (char *);
 int invalidArgs(int mbox_id, int msg_max_size);
 void clock_handler(int code, void * dev);
-void disk_handler(int code, int dev);
+void disk_handler(int code, void * dev);
 void term_handler(int code, int dev);
-void alarm_handler(int code, void * dev);
+void wakeUpReceive(int mbox_id);
+int check_io(void);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -95,7 +96,6 @@ int start1(char *arg)
 
     // Interrupt Handlers
     USLOSS_IntVec[USLOSS_CLOCK_INT] = clock_handler;
-	USLOSS_IntVec[USLOSS_ALARM_INT] = alarm_handler;
     USLOSS_IntVec[USLOSS_DISK_INT] = disk_handler;
     USLOSS_IntVec[USLOSS_TERM_INT] = term_handler;
 
@@ -161,6 +161,7 @@ int MboxCreate(int slots, int slot_size)
 int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
 {
     
+    disableInterrupts();
     /* test if in kernel mode; halt if in user mode */
     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
         USLOSS_Halt(1);
@@ -220,10 +221,10 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         unblockProc(MailBoxTable[mbox_id%MAXMBOX].sendList->PID);
         MailBoxTable[mbox_id%MAXMBOX].sendList = MailBoxTable[mbox_id%MAXMBOX].sendList->next;
     }
-    
-    
     // Increment amount of total system slots used
     slotsUsed++;
+    
+    enableInterrupts();
     
     
     return 0;
@@ -535,7 +536,7 @@ void clock_handler(int interruptNum, void * unit)
     }
     
     // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, unit, &status);
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (int) unit, &status);
     
     if (valid != USLOSS_DEV_OK){
         USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
@@ -543,7 +544,7 @@ void clock_handler(int interruptNum, void * unit)
     }
     // Conditionally send to clock mailbox every 5th interrupt.
     if(interruptNum!=0 && interruptNum % 5 == 0){
-        MboxCondSend(USLOSS_CLOCK_DEV+mBoxOffSet, &status, sizeof(int));
+        MboxCondSend(CLOCKMBOX, &status, sizeof(int));
     }
     }
 
@@ -552,9 +553,9 @@ void disk_handler(int code, void * dev)
 {
 	void * stats;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_DISK_DEV, dev, stats);
+	USLOSS_DeviceInput(USLOSS_DISK_DEV, (int) dev, stats);
 	/* write the terminal status register to the correct mailbox */
-	switch(dev){
+	switch((int) dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
 			MboxCondSend(DISKZEROMBOX, stats, 1);
@@ -592,7 +593,12 @@ void term_handler(int code, int dev)
 	}
 }
 
-void alarm_handler(int code, void * dev)
-{
 
+int check_io(void){
+    int i;
+    for(i=0;i<MAXMBOX;i++){
+        if(MailBoxTable[i].receiveList!=NULL || MailBoxTable[i].sendList!=NULL)
+            return 1;
+    }
+    return 0;
 }

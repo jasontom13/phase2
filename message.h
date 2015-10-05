@@ -4,6 +4,8 @@
 #define TRUE 1
 #define FALSE 0
 
+#define CLOCKMBOX 11
+#define ALARMMBOX 12
 #define DISKZEROMBOX 13
 #define DISKONEMBOX 14
 #define TERMZEROMBOX 15
