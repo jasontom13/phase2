@@ -31,11 +31,11 @@ void finish();
 /* -------------------------- Globals ---	---------------------------------- */
 
 int debugflag2 = 0;
+int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
 mailbox MailBoxTable[MAXMBOX];
 int boxID;
-int mBoxOffSet;
 
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
@@ -61,7 +61,6 @@ int start1(char *arg)
 {
     int kid_pid;
     int status;
-    mBoxOffSet = 11;
     
     if (DEBUG2 && debugflag2)
         USLOSS_Console("start1(): at beginning\n");
@@ -85,7 +84,7 @@ int start1(char *arg)
     }
 
     slotsUsed=0;
-    boxID=11;
+    boxID=0;
     
     // Initialize USLOSS_IntVec and system call handlers,
 
@@ -202,7 +201,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         
         p2procTable[getpid()%MAXPROC].status = mbox_id;
         p2procTable[getpid()%MAXPROC].pid = getpid();
-        blockMe(mbox_id);
+        blockMe(BLOCKMECONSTANT);
     }
     
     // Check if the mailbox had been released
@@ -291,7 +290,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
      last->next = &tempMailLine;
    }
    /* block */
-   blockMe(mbox_id);
+   blockMe(BLOCKMECONSTANT);
  }
  
  /* if the mailbox has since been released, return -3 */
@@ -519,7 +518,7 @@ extern int waitdevice(int type, int unit, int *status)
 	if(type < USLOSS_CLOCK_DEV || type > USLOSS_TERM_DEV){
 		USLOSS_Halt(1);
 	}
-	MboxReceive(MailBoxTable[(mBoxOffSet + type)%MAXMBOX].mboxID, status, MAX_MESSAGE);
+	MboxReceive(MailBoxTable[(type)%MAXMBOX].mboxID, status, MAX_MESSAGE);
 
 	/* if it was zapped while it was blocked, return -1 */
 	if(isZapped()){
