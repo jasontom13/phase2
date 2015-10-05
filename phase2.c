@@ -230,6 +230,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     mailSlot.nextSlot = NULL;
     
     slot->nextSlot = &mailSlot;
+    MailBoxTable[mbox_id%MAXMBOX].usedSlots++;
 
     
     // Unblock any processes waiting on receiving a message from the mailbox
@@ -242,6 +243,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     
     enableInterrupts();
     
+    USLOSS_Console("SEND MSG: %s\n", msg_ptr);
     
     return 0;
     
@@ -273,6 +275,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
+    
+    if (DEBUG2 && debugflag2)
+        USLOSS_Console("MboxReceive(): starting\n");
  /* test if in kernel mode; halt if in user mode */
  if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
    USLOSS_Halt(1);
@@ -491,7 +496,7 @@ int invalidArgs(int mbox_id, int msg_max_size)
   if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
 	  return 1;
   }
-  else if(msg_max_size < MAX_MESSAGE){
+  else if(msg_max_size > MAX_MESSAGE){
 	  return 1;
   }
   else
