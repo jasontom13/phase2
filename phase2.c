@@ -328,6 +328,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		target->head->status = INACTIVE;
 		target->head = target->head->nextSlot;
 		target->usedSlots--;
+		slotsUsed--;
 	}
 
 	/* if send-blocked processes exist, move message into slot and unblock waiting process */
@@ -383,16 +384,14 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 		slotPtr temp = target->head;
 		for(; temp->nextSlot != NULL; temp = temp->nextSlot);
 		mailSlot newSlot;
-        memcpy(newSlot.message, msg_ptr, msg_size);
-		newSlot.mboxID = mbox_id;
-		newSlot.nextSlot = NULL;
-		temp->nextSlot = &newSlot;
+		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
 		target->usedSlots++;
+		slotsUsed++;
 	}
 
 	// Unblock any processes waiting on receiving a message from the mailbox
-	if(MailBoxTable[mbox_id%MAXMBOX].sendList!=NULL){
-		unblockProc(MailBoxTable[mbox_id%MAXMBOX].sendList->PID);
+	if(target->waitList!=NULL){
+		unblockProc(target->waitList->PID);
 		MailBoxTable[mbox_id%MAXMBOX].sendList = MailBoxTable[mbox_id%MAXMBOX].sendList->next;
 	}
 
@@ -447,6 +446,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 		/* "free" the slot in the mailbox */
 		target->head = target->head->nextSlot;
 		target->usedSlots--;
+		slotsUsed--;
 	}
 
 	/* if send-blocked processes exist, move message into slot and unblock waiting process */
