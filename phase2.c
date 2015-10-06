@@ -27,6 +27,7 @@ int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
 int addMessage(int mbox_id, void *msg_ptr, int msg_size);
+mailLine * getWaiter();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -141,7 +142,6 @@ int MboxCreate(int slots, int slot_size)
     
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
-    int iter;
     for(i=boxID; i<boxID+MAXMBOX; i++){
         if(MailBoxTable[i%MAXMBOX].mboxID==-1){
             boxID=i;
@@ -318,12 +318,13 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
 	/* if the mailbox has since been released, return -3 */
 	if(target->mboxID == INACTIVE){
-
+		return -3;
 	}
 	/* else obtain the message */
 	else{
 		if (DEBUG2 && debugflag2)
 			USLOSS_Console("MboxReceive(): get message: %s\n", target->head->message);
+		recMsgSize = target->waitList->msgSize;
 		void* answer;
 		answer = memcpy(msg_ptr, target->head->message, msg_size);
 		if(answer == NULL)
@@ -343,7 +344,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
 	}
-	return msg_size;
+	return recMsgSize;
 } /* MboxReceive */
 
 /* returns 0 if successful, 1 if mailbox full, -1 if illegal args */
@@ -450,7 +451,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 	}
 
 	/* if send-blocked processes exist, move message into slot and unblock waiting process */
-	if(target.waitList != NULL){
+	if(target->waitList != NULL){
 		int waitPID = target->waitList->PID;
 		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
 		target->waitList->PID = INACTIVE;
