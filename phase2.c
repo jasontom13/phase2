@@ -33,7 +33,7 @@ mailLine * getWaiter();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 1;
+int debugflag2 = 0;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -199,6 +199,25 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         USLOSS_Console("Exceeded the number of system slots allowed. Halting...\n");
         USLOSS_Halt(1);
     }
+    
+    // Check for WaitList
+    struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
+    // Unblock process that is receiveBlocked and deliver it's message to the mailbox right away
+    if(target->waitList!=NULL && target->usedSlots == 0){
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", target->waitList->PID);
+        //addMessage(mbox_id, MailBoxTable[mbox_id%MAXMBOX].waitList->msg, MailBoxTable[mbox_id%MAXMBOX].waitList->msgSize);
+        /* place the message in the address of the waiting process */
+        memcpy(target->waitList->msg, msg_ptr, msg_size);
+        target->waitList->msgSize=msg_size;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): after memcpy, the waitListMsg is : %s\n", target->waitList->msg);
+        
+        unblockProc(target->waitList->PID);
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): after unblockproc\n");
+        return 0;
+    }
         
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
@@ -243,35 +262,15 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         }
     }
     
-    // Check if the mailbox had been released
-    if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
-        return -3;
-    }
-    
-    struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
-    // Unblock process that is receiveBlocked and deliver it's message to the mailbox right away
-    if(target->waitList!=NULL && target->usedSlots == 0){
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", target->waitList->PID);
-        //addMessage(mbox_id, MailBoxTable[mbox_id%MAXMBOX].waitList->msg, MailBoxTable[mbox_id%MAXMBOX].waitList->msgSize);
-        /* place the message in the address of the waiting process */
-        if(target->waitList == NULL){
-            USLOSS_Console("MboxSend(): waitList is null\n");
-        }
-        memcpy(target->waitList->msg, msg_ptr, msg_size);
-        target->waitList->msgSize=msg_size;
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): after memcpy, the waitListMsg is : %s\n", target->waitList->msg);
-
-        unblockProc(target->waitList->PID);
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): after unblockproc\n");
-    }
-    
     // If there was no receiveBlocked processes, add the message like normal
     else{
         // Adding message to slot in mailbox
         addMessage(mbox_id, msg_ptr, msg_size);
+    }
+    
+    // Check if the mailbox had been released
+    if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
+        return -3;
     }
      
     enableInterrupts();
@@ -417,14 +416,12 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
         if(check_io()){
             USLOSS_Console("MboxCondSend(): OHHHHH\n");
         }
-        USLOSS_Console("MboxCondSend(): BACKUP1\n");
     }
 	// if the process is zapped, return -3
 	if(isZapped()){
 		USLOSS_Console("Process has been zapped\n");
 		return -3;
 	}
-	USLOSS_Console("MboxCondSend(): BACKUP2\n");
 	
 	/* disable interrupts */
 	disableInterrupts();
@@ -432,27 +429,19 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
 	/* if the mailbox is unable to accept further messages return -2 */
 	if(target->maxSlots == target->usedSlots){
-		USLOSS_Console("MboxCondSend(): BACKUP4\n");
 		return -2;
 	}
 
 	/* if there is a process blocked on receive from the mailbox */
 	else if(target->waitList != NULL){
-		USLOSS_Console("MboxCondSend(): BACKUP5\n");
 		int waitPID = target->waitList->PID;
 		memcpy(target->waitList->msg, msg_ptr, msg_size);
 		target->waitList->PID = INACTIVE;
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
 	}else{
-		USLOSS_Console("MboxCondSend(): BACKUP6\n");
 		/* deposit the message into the mailbox */
-		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
-		USLOSS_Console("MboxCondSend(): BACKUP7\n");
-		target->usedSlots++;
-		USLOSS_Console("MboxCondSend(): BACKUP8\n");
-		slotsUsed++;
-		USLOSS_Console("MboxCondSend(): BACKUP9\n");
+        addMessage(mbox_id, msg_ptr, msg_size);
 	}
 	return 0;
 }
