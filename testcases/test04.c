@@ -35,11 +35,11 @@ int start2(char *arg)
 int XXp1(char *arg)
 {
   int result;
+
   printf("XXp1(): started\n");
   printf("XXp1(): sending message to mailbox %d\n", mbox_id);
   result = MboxSend(mbox_id, "hello there", strlen("hello there")+1);
   printf("XXp1(): after send of message, result = %d\n", result);
-
 
   quit(-3);
   return 0;

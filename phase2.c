@@ -22,11 +22,13 @@ int invalidArgs(int mbox_id, int msg_max_size);
 void clock_handler(int code, void * dev);
 void disk_handler(int code, void * dev);
 void term_handler(int code, void * dev);
+void sys_handler(int code, void * args);
 void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
 int addMessage(int mbox_id, void *msg_ptr, int msg_size);
+void nullSys(sysargs *args);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -45,6 +47,9 @@ interruptHandler intTable[MAXHANDLERS];
 
 /* an array of waiting processes */
 mailLine waitLine[MAXPROC];
+
+/* Syscall handler vector */
+void (*sys_vec[MAXSYSCALLS])(sysargs *args);
 
 /* global array of slots */
 mailSlot slots[MAXSLOTS];
@@ -87,6 +92,10 @@ int start1(char *arg)
     for(iter=0;iter<MAXPROC;iter++){
         waitLine[iter].status=INACTIVE;
     }
+    // Initialize syscall vector
+    for(iter=0;iter<MAXSYSCALLS;iter++){
+        sys_vec[iter]=nullSys;
+    }
 
     slotsUsed=0;
     boxID=0;
@@ -106,6 +115,7 @@ int start1(char *arg)
     USLOSS_IntVec[USLOSS_CLOCK_INT] = clock_handler;
     USLOSS_IntVec[USLOSS_DISK_INT] = disk_handler;
     USLOSS_IntVec[USLOSS_TERM_INT] = term_handler;
+    USLOSS_IntVec[USLOSS_SYSCALL_INT] = sys_handler;
 
 
     enableInterrupts();
@@ -141,9 +151,8 @@ int MboxCreate(int slots, int slot_size)
     
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
-    int iter;
     for(i=boxID; i<boxID+MAXMBOX; i++){
-        if(MailBoxTable[i%MAXMBOX].mboxID==-1){
+        if(MailBoxTable[i%MAXMBOX].mboxID==INACTIVE){
             boxID=i;
             MailBoxTable[i%MAXMBOX].mboxID = boxID;
             MailBoxTable[i%MAXMBOX].maxSlots = slots;
@@ -318,6 +327,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
 	/* if the mailbox has since been released, return -3 */
 	if(target->mboxID == INACTIVE){
+        return -3;
 
 	}
 	/* else obtain the message */
@@ -454,7 +464,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 	}
 
 	/* if send-blocked processes exist, move message into slot and unblock waiting process */
-	if(target.waitList != NULL){
+	if(target->waitList != NULL){
 		int waitPID = target->waitList->PID;
 		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
 		target->waitList->PID = INACTIVE;
@@ -641,6 +651,19 @@ void term_handler(int code, void * dev)
 }
 
 
+void sys_handler(int code, void * args){
+    if ((int)((sysargs *) args)->arg2 >= MAXSYSCALLS){
+        USLOSS_Console("nullSys: System call number out of bounds. Halting...\n");
+        USLOSS_Halt(1);
+    }
+    else{
+        sys_vec[(int)((sysargs *) args)->arg2](args);
+    }
+    
+    
+}
+
+
 int check_io(void){
     int i;
     for(i=0;i<MAXMBOX;i++){
@@ -733,5 +756,12 @@ int addMessage(int mbox_id, void *msg_ptr, int msg_size){
     slotsUsed++;
     
     return 0;
+}
+
+void nullSys(sysargs *args){
+    if (DEBUG2 && debugflag2){
+        USLOSS_Console("nullSys(): Called!\n");
+    }
+    USLOSS_Halt(1);
 }
 
