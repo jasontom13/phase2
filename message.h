@@ -23,6 +23,19 @@ typedef struct mboxProc *mboxProcPtr;
 typedef void (*interruptHandler)(int);
 typedef struct procStruct procStruct;
 
+typedef struct mailLine
+{
+    int PID;
+    // a pointer to the location in memory where the sent message is stored
+    void * msg;
+    // the max message size that can be held
+    int msgSize;
+    // the status of the mailLine object
+    int status;
+    // a pointer to the next mailLine object
+    struct mailLine * next;
+}mailLine;
+
 struct mailbox {
     int       mboxID;
     // other items as needed...
@@ -52,18 +65,7 @@ struct psrBits {
     unsigned int unused:28;
 };
 
-typedef struct mailLine
-{
-  int PID;
-  // a pointer to the location in memory where the sent message is stored
-  void * msg;
-  // the max message size that can be held
-  int msgSize;
-  // the status of the mailLine object
-  int status;
-  // a pointer to the next mailLine object
-  mailLine * next;
-}mailLine;
+
 
 struct procStruct{
     int pid;
