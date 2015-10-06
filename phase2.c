@@ -23,13 +23,13 @@ void clock_handler(int code, void * dev);
 void disk_handler(int code, void * dev);
 void term_handler(int code, void * dev);
 void sys_handler(int code, void * args);
-void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
 int addMessage(int mbox_id, void *msg_ptr, int msg_size);
 void nullSys(sysargs *args);
 mailLine * getWaiter();
+extern int waitdevice(int type, int unit, int *status);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -317,8 +317,17 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 	disableInterrupts();
 
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
+	/* if send-blocked processes exist, move message into slot and unblock waiting process */
+	if(target->waitList != NULL){
+		int waitPID = target->waitList->PID;
+		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
+		target->waitList->PID = INACTIVE;
+		target->waitList = target->waitList->next;
+		recMsgSize = target->head->msg_size;
+		unblockProc(waitPID);
+	}
 	/* if the process is not able to obtain a message from the appropriate mailbox, block */
-	if(target->usedSlots == 0){
+	else if(target->usedSlots == 0){
 		/* add the current node to the rear of the waitList */
 		mailLine * tempWaiter;
 		if(target->waitList == NULL){
@@ -354,11 +363,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
 		return tempWaiter->msgSize;
 	}
-
-	/* if the mailbox has since been released, return -3 */
-	if(target->mboxID == INACTIVE){
-        return -3;
-	}
 	/* else obtain the message */
 	else{
 		if (DEBUG2 && debugflag2)
@@ -378,14 +382,11 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		slotsUsed--;
 	}
 
-	/* if send-blocked processes exist, move message into slot and unblock waiting process */
-	if(target->waitList != NULL){
-		int waitPID = target->waitList->PID;
-		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
-		target->waitList->PID = INACTIVE;
-		target->waitList = target->waitList->next;
-		unblockProc(waitPID);
+	/* if the mailbox has since been released, return -3 */
+	if(target->mboxID == INACTIVE){
+		return -3;
 	}
+
 	return recMsgSize;
 } /* MboxReceive */
 
@@ -490,7 +491,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 			return -1;
 		}
 		/* copy the message */
-		msg_ptr = temp->message;
+		memcpy(msg_ptr, temp->message, temp->msg_size );
 		/* "free" the slot in the mailbox */
 		target->head = target->head->nextSlot;
 		target->usedSlots--;
