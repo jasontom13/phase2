@@ -26,7 +26,6 @@ void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
-void finish();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -34,7 +33,7 @@ int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
-mailbox MailBoxTable[MAXMBOX];
+struct mailbox MailBoxTable[MAXMBOX];
 int boxID;
 
 // also need array of mail slots, array of function ptrs to system call 
@@ -43,7 +42,6 @@ int boxID;
 procStruct p2procTable[MAXPROC];
 int slotsUsed;
 
-mailSlot slottyArray[MAXSLOTS];
 interruptHandler intTable[MAXHANDLERS];
 
 
@@ -189,21 +187,25 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
         
-        mailLine * new = NULL;
-        new->PID = getpid();
-        new->next = NULL;
+        mailLine new;
+        new.PID=getpid();
+        new.next=NULL;
+
         mailLine * temp = MailBoxTable[mbox_id%MAXMBOX].sendList;
+
         
         if(temp!=NULL){
             for(; temp->next!=NULL; temp = temp->next);
-            temp->next = new;
+            temp->next = &new;
         }
         else{
-            temp = new;
+            MailBoxTable[mbox_id%MAXMBOX].sendList = &new;
         }
         
         p2procTable[getpid()%MAXPROC].status = mbox_id;
         p2procTable[getpid()%MAXPROC].pid = getpid();
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): BLOCKED\n");
         blockMe(BLOCKMECONSTANT);
     }
     
@@ -212,28 +214,47 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         return -3;
     }
     
-    // Create a new mailSlot
-    mailSlot mailSlot;
-    memcpy(mailSlot.message, msg_ptr, msg_size);
-    mailSlot.msg_size = msg_size;
-    mailSlot.mboxID = mbox_id;
-    mailSlot.nextSlot = NULL;
     
+    // Create a new mailSlot
+    
+    slotPtr mailSlot = malloc(sizeof(mailSlot));
+    memcpy(mailSlot->message, msg_ptr, msg_size);
+    mailSlot->msg_size = msg_size;
+    mailSlot->mboxID = mbox_id;
+    mailSlot->nextSlot = NULL;
     if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): adding message: %s\n", mailSlot.message);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): message is size: %d\n", mailSlot.msg_size);
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): sending to mailbox id: %d\n", mbox_id);
+        USLOSS_Console("MboxSend(): contents of new slot = \"%s\"  %d\n", mailSlot->message, mailSlot->msg_size);
+    
+    
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxSend(): adding message: %s\n", mailSlot.message);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxSend(): message is size: %d\n", mailSlot.msg_size);
+//    if (DEBUG2 && debugflag2)
+//        USLOSS_Console("MboxSend(): sending to mailbox id: %d\n", mbox_id);
 
     // Adding message to slot in mailbox
     slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
     if(slot!=NULL){
-        for(;slot->nextSlot!=NULL;slot=slot->nextSlot);
-        slot->nextSlot = &mailSlot;
+        if(slot->nextSlot==NULL){
+            USLOSS_Console("Next Slot is NULL\n");
+        }
+        USLOSS_Console("MboxSend(): First slot: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): SLOT IS NOT NULL\n");
+        for(;slot->nextSlot!=NULL;slot=slot->nextSlot){
+            if (DEBUG2 && debugflag2)
+                USLOSS_Console("CURRENT SLOT MSG: %s\n", slot->message);
+        }
+        slot->nextSlot = mailSlot;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): contents of placed slot = \"%s\"  %d\n", slot->nextSlot->message, slot->nextSlot->msg_size);
+        
     }
     else{
-        MailBoxTable[mbox_id%MAXMBOX].firstSlot = &mailSlot;
+        MailBoxTable[mbox_id%MAXMBOX].firstSlot = mailSlot;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): FIRSTSLOT IS NO LONGER NULL. %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
     }
     MailBoxTable[mbox_id%MAXMBOX].usedSlots++;
 
@@ -252,13 +273,12 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     // Increment amount of total system slots used
     slotsUsed++;
     
+//    if (DEBUG2 && debugflag2){
+//    	USLOSS_Console("The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+//    	USLOSS_Console("A second time: The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
+//    }
     enableInterrupts();
-    
-    
-    
     return 0;
-    
-    
     
     /*Check for possible errors (message size too large, inactive mailbox id, etc.).
      • Return -1 if errors are found.
@@ -341,7 +361,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         return -3;
     }
     
-    
     /* else obtain the message */
     else{
         void* answer;
@@ -353,7 +372,8 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         recMsgSize = MailBoxTable[mbox_id % MAXMBOX].firstSlot->msg_size;
         answer = memcpy(msg_ptr, MailBoxTable[mbox_id % MAXMBOX].firstSlot->message, msg_size);
         
-        if(answer == NULL) return -1;
+        if(answer == NULL)
+            return -1;
         if(MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot!=NULL){
             MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
         }
@@ -365,11 +385,14 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     
     /* unblock process waiting to send, if exists */
     if(MailBoxTable[mbox_id % MAXMBOX].sendList != NULL){
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxReceive(): blah\n\n\n");
         int tempPID = MailBoxTable[mbox_id % MAXMBOX].sendList->PID;
         MailBoxTable[mbox_id % MAXMBOX].sendList = MailBoxTable[mbox_id % MAXMBOX].sendList->next;
         unblockProc(tempPID);
     }
     return recMsgSize;
+
  
 } /* MboxReceive */
 
@@ -588,8 +611,9 @@ extern int waitdevice(int type, int unit, int *status)
 	return 0;
 }
 
-void clock_handler(int interruptNum, void * unit)
+void clock_handler(int devNum, void * unit)
 {
+    static int interruptNum = 1;
     int status;
     int valid;
     // Error checking if the device really is the clock device
@@ -600,7 +624,7 @@ void clock_handler(int interruptNum, void * unit)
     }
     
     // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (int) unit, &status);
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
     
     if (valid != USLOSS_DEV_OK){
         USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
@@ -610,16 +634,17 @@ void clock_handler(int interruptNum, void * unit)
     if(interruptNum!=0 && interruptNum % 5 == 0){
         MboxCondSend(CLOCKMBOX, &status, sizeof(int));
     }
-    }
+    interruptNum++;
+}
 
-// accepts interrupt signals from DIS
+// accepts interrupt signals from DISK device
 void disk_handler(int code, void * dev)
 {
     void * stats = NULL;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_DISK_DEV, (int) dev, stats);
+	USLOSS_DeviceInput(USLOSS_DISK_DEV, (long) dev, stats);
 	/* write the terminal status register to the correct mailbox */
-	switch((int) dev){
+	switch((long) dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
 			MboxCondSend(DISKZEROMBOX, stats, 1);
@@ -632,25 +657,27 @@ void disk_handler(int code, void * dev)
 	}
 }
 
+/* handler for terminal interrupts */
 void term_handler(int code, void * dev)
 {
-    void * stats = NULL;
+    int stats;
 	/* obtain terminal status register */
-	USLOSS_DeviceInput(USLOSS_TERM_DEV, (int)dev, stats);
+	USLOSS_DeviceInput(USLOSS_TERM_DEV, (long)dev, &stats);
+	stats = USLOSS_TERM_STAT_CHAR(stats);
 	/* write the terminal status register to the correct mailbox */
-	switch((int)dev){
+	switch((long)dev){
 		/* write to the appropriate mailbox and wake up any waiting processes */
 		case 0:
-			MboxCondSend(TERMZEROMBOX, stats, 1);
+			MboxCondSend(TERMZEROMBOX, &stats, 1);
 			break;
 		case 1:
-			MboxCondSend(TERMONEMBOX, stats, 1);
+			MboxCondSend(TERMONEMBOX, &stats, 1);
 			break;
 		case 2:
-			MboxCondSend(TERMTWOMBOX, stats, 1);
+			MboxCondSend(TERMTWOMBOX, &stats, 1);
 			break;
 		case 3:
-			MboxCondSend(TERMTHREEMBOX, stats, 1);
+			MboxCondSend(TERMTHREEMBOX, &stats, 1);
 			break;
 		default:
 			USLOSS_Halt(1);
