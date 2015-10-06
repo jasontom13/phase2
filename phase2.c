@@ -378,27 +378,23 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	disableInterrupts();
 	
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
-	/* test if the mailbox is full */
+	/* if the mailbox is unable to accept further messages return -2 */
 	if(target->maxSlots == target->usedSlots){
-		wakeUpReceive(mbox_id);
 		return -2;
 	}
-	else{
+	/* if there is a process blocked on receive from the mailbox */
+	else if(target->waitList != NULL){
+		int waitPID = target->waitList->PID;
+		memcpy(target->waitList->msg, msg_ptr, msg_size);
+		target->waitList->PID = INACTIVE;
+		target->waitList = target->waitList->next;
+		unblockProc(waitPID);
+	}else{
 		/* deposit the message into the mailbox */
-		slotPtr temp = target->head;
-		for(; temp->nextSlot != NULL; temp = temp->nextSlot);
-		mailSlot newSlot;
 		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
 		target->usedSlots++;
 		slotsUsed++;
 	}
-
-	// Unblock any processes waiting on receiving a message from the mailbox
-	if(target->waitList!=NULL){
-		unblockProc(target->waitList->PID);
-		MailBoxTable[mbox_id%MAXMBOX].sendList = MailBoxTable[mbox_id%MAXMBOX].sendList->next;
-	}
-
 	return 0;
 }
 
@@ -524,15 +520,6 @@ int invalidArgs(int mbox_id, int msg_max_size)
   else
 	  return 0;
 }
-
-void wakeUpReceive(int mbox_id){
-	// Unblock any processes waiting on receiving a message from the mailbox
-	if(MailBoxTable[mbox_id%MAXMBOX].waitList!=NULL){
-		unblockProc(MailBoxTable[mbox_id%MAXMBOX].waitList->PID);
-		MailBoxTable[mbox_id%MAXMBOX].waitList = MailBoxTable[mbox_id%MAXMBOX].waitList->next;
-	}
-}
-
 
 /*-----------------------------------------------------------------------
 Name - waitdevice
@@ -733,5 +720,15 @@ int addMessage(int mbox_id, void *msg_ptr, int msg_size){
     slotsUsed++;
     
     return 0;
+}
+
+/* returns an inactive mailLine pointer */
+mailLine * getWaiter(){
+	int iter;
+	for(iter = 0; iter < MAXPROC; iter++){
+		if(waitLine[iter].PID == INACTIVE)
+			return &waitLine[iter];
+	}
+	return NULL;
 }
 
