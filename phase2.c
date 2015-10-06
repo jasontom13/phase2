@@ -145,7 +145,6 @@ int MboxCreate(int slots, int slot_size)
             boxID=i;
             MailBoxTable[i%MAXMBOX].mboxID = boxID;
             MailBoxTable[i%MAXMBOX].maxSlots = slots;
-
             MailBoxTable[i%MAXMBOX].usedSlots = 0;
             MailBoxTable[i%MAXMBOX].slotSize =  slot_size>MAX_MESSAGE ? MAX_MESSAGE : slot_size;
             MailBoxTable[i%MAXMBOX].head = NULL;

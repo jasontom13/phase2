@@ -50,12 +50,6 @@ typedef struct sysargs
 
 extern void             (*sys_vec[])(sysargs *args);
 
-typedef struct mailLine mailLine;
 
-struct mailLine
-{
-  int PID;
-  mailLine * next;
-};
 
 #endif
