@@ -26,6 +26,7 @@ void wakeUpReceive(int mbox_id);
 int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
+int addMessage(int mbox_id, void *msg_ptr, int msg_size);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
@@ -38,13 +39,15 @@ int boxID;
 
 // also need array of mail slots, array of function ptrs to system call 
 // handlers, ...
-// a process table for phase2
-procStruct p2procTable[MAXPROC];
 int slotsUsed;
 
 interruptHandler intTable[MAXHANDLERS];
 
+/* an array of waiting processes */
+mailLine waitLine[MAXPROC];
 
+/* global array of slots */
+mailSlot slots[MAXSLOTS];
 /* -------------------------- Functions ----------------------------------- */
 
 /* ------------------------------------------------------------------------
@@ -74,12 +77,15 @@ int start1(char *arg)
     int iter = 0;
     for(;iter < MAXMBOX; iter++){
       MailBoxTable[iter].mboxID = INACTIVE;
-        MailBoxTable[iter].firstSlot = NULL;
+        MailBoxTable[iter].head = NULL;
     }
     
-    for(iter=0;iter < MAXPROC; iter++){
-        p2procTable[iter].pid=-1;
-        p2procTable[iter].status=-1;
+    for(iter=0;iter<MAXSLOTS;iter++){
+        slots[iter].status=INACTIVE;
+    }
+    
+    for(iter=0;iter<MAXPROC;iter++){
+        waitLine[iter].status=INACTIVE;
     }
 
     slotsUsed=0;
@@ -135,6 +141,7 @@ int MboxCreate(int slots, int slot_size)
     
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
+    int iter;
     for(i=boxID; i<boxID+MAXMBOX; i++){
         if(MailBoxTable[i%MAXMBOX].mboxID==-1){
             boxID=i;
@@ -142,9 +149,9 @@ int MboxCreate(int slots, int slot_size)
             MailBoxTable[i%MAXMBOX].maxSlots = slots;
             MailBoxTable[i%MAXMBOX].usedSlots = 0;
             MailBoxTable[i%MAXMBOX].slotSize =  slot_size>MAX_MESSAGE ? MAX_MESSAGE : slot_size;
-            MailBoxTable[i%MAXMBOX].firstSlot = NULL;
-            MailBoxTable[i%MAXMBOX].sendList = NULL;
-            MailBoxTable[i%MAXMBOX].receiveList = NULL;
+            MailBoxTable[i%MAXMBOX].head = NULL;
+            MailBoxTable[i%MAXMBOX].tail = NULL;
+            MailBoxTable[i%MAXMBOX].waitList = NULL;
             return boxID;
         }
     }
@@ -174,39 +181,46 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     // If inactive mailbox
     if(MailBoxTable[mbox_id%MAXMBOX].mboxID==INACTIVE)
         return -1;
+
     // If message size too big
     if(MailBoxTable[mbox_id%MAXMBOX].slotSize<msg_size)
         return -1;
-    
     if(slotsUsed > MAXSLOTS){
         USLOSS_Console("Exceeded the number of system slots allowed. Halting...\n");
         USLOSS_Halt(1);
     }
         
-    
     // If no slots available, block the sending process
     if(MailBoxTable[mbox_id%MAXMBOX].usedSlots >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
-        
-        mailLine new;
-        new.PID=getpid();
-        new.next=NULL;
-
-        mailLine * temp = MailBoxTable[mbox_id%MAXMBOX].sendList;
-
-        
-        if(temp!=NULL){
-            for(; temp->next!=NULL; temp = temp->next);
-            temp->next = &new;
+        int i;
+        // Finding an open slot in waitLine & adding the wait-ee's information into it.
+        for(i=0;i<MAXPROC;i++){
+            if(waitLine[i].status==INACTIVE){
+                waitLine[i].PID=getpid();
+                waitLine[i].next=NULL;
+                memcpy(waitLine[i].msg, msg_ptr, msg_size);
+                waitLine[i].msgSize=msg_size;
+                if(MailBoxTable[mbox_id%MAXMBOX].waitList == NULL){
+                    MailBoxTable[mbox_id%MAXMBOX].waitList = &waitLine[i];
+                }
+                // Assigning the latest wait-ee to the next in line in the waitLine table.
+                else{
+                    mailLine * temp;
+                    for(temp = MailBoxTable[mbox_id%MAXMBOX].waitList; temp->next!=NULL; temp = temp->next);
+                    temp->next = &waitLine[i];
+                }
+            }
         }
-        else{
-            MailBoxTable[mbox_id%MAXMBOX].sendList = &new;
-        }
-        
-        p2procTable[getpid()%MAXPROC].status = mbox_id;
-        p2procTable[getpid()%MAXPROC].pid = getpid();
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxSend(): BLOCKED\n");
         blockMe(BLOCKMECONSTANT);
+        // Check if the mailbox had been released
+        if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
+            return -3;
+        }
+        else{
+            return 0;
+        }
     }
     
     // Check if the mailbox had been released
@@ -214,69 +228,25 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         return -3;
     }
     
-    
-    // Create a new mailSlot
-    
-    slotPtr mailSlot = malloc(sizeof(mailSlot));
-    memcpy(mailSlot->message, msg_ptr, msg_size);
-    mailSlot->msg_size = msg_size;
-    mailSlot->mboxID = mbox_id;
-    mailSlot->nextSlot = NULL;
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): contents of new slot = \"%s\"  %d\n", mailSlot->message, mailSlot->msg_size);
-    
-    
-//    if (DEBUG2 && debugflag2)
-//        USLOSS_Console("MboxSend(): adding message: %s\n", mailSlot.message);
-//    if (DEBUG2 && debugflag2)
-//        USLOSS_Console("MboxSend(): message is size: %d\n", mailSlot.msg_size);
-//    if (DEBUG2 && debugflag2)
-//        USLOSS_Console("MboxSend(): sending to mailbox id: %d\n", mbox_id);
-
-    // Adding message to slot in mailbox
-    slotPtr slot = MailBoxTable[mbox_id%MAXMBOX].firstSlot;
-    if(slot!=NULL){
-        if(slot->nextSlot==NULL){
-            USLOSS_Console("Next Slot is NULL\n");
-        }
-        USLOSS_Console("MboxSend(): First slot: %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
+    // Unblock process that is receiveBlocked and deliver it's message to the mailbox right away
+    if(MailBoxTable[mbox_id%MAXMBOX].waitList!=NULL && MailBoxTable[mbox_id%MAXMBOX].usedSlots == 0){
         if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): SLOT IS NOT NULL\n");
-        for(;slot->nextSlot!=NULL;slot=slot->nextSlot){
-            if (DEBUG2 && debugflag2)
-                USLOSS_Console("CURRENT SLOT MSG: %s\n", slot->message);
-        }
-        slot->nextSlot = mailSlot;
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): contents of placed slot = \"%s\"  %d\n", slot->nextSlot->message, slot->nextSlot->msg_size);
-        
-    }
-    else{
-        MailBoxTable[mbox_id%MAXMBOX].firstSlot = mailSlot;
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): FIRSTSLOT IS NO LONGER NULL. %s\n", MailBoxTable[mbox_id%MAXMBOX].firstSlot->message);
-    }
-    MailBoxTable[mbox_id%MAXMBOX].usedSlots++;
-
-    
-    // Unblock any processes waiting on receiving a message from the mailbox
-    if(MailBoxTable[mbox_id%MAXMBOX].receiveList!=NULL){
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
-        unblockProc(MailBoxTable[mbox_id%MAXMBOX].receiveList->PID);
+            USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", MailBoxTable[mbox_id%MAXMBOX].waitList->PID);
+        addMessage(mbox_id, MailBoxTable[mbox_id%MAXMBOX].waitList->msg, MailBoxTable[mbox_id%MAXMBOX].waitList->msgSize);
+        unblockProc(MailBoxTable[mbox_id%MAXMBOX].waitList->PID);
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxSend(): after unblockproc\n");
-        MailBoxTable[mbox_id%MAXMBOX].receiveList = MailBoxTable[mbox_id%MAXMBOX].receiveList->next;
+        MailBoxTable[mbox_id%MAXMBOX].waitList = MailBoxTable[mbox_id%MAXMBOX].waitList->next;
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxSend(): nexxxttt\n");
     }
-    // Increment amount of total system slots used
-    slotsUsed++;
     
-//    if (DEBUG2 && debugflag2){
-//    	USLOSS_Console("The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
-//    	USLOSS_Console("A second time: The message pushed to mbox ID %d is %s\n with length %d\n", mbox_id, MailBoxTable[mbox_id%MAXMBOX].firstSlot->message, MailBoxTable[mbox_id%MAXMBOX].firstSlot->msg_size);
-//    }
+    // If there was no receiveBlocked processes, add the message like normal
+    else{
+        // Adding message to slot in mailbox
+        addMessage(mbox_id, msg_ptr, msg_size);
+    }
+     
     enableInterrupts();
     return 0;
     
@@ -306,7 +276,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 {
-    
     int recMsgSize;
     if (DEBUG2 && debugflag2)
         USLOSS_Console("MboxReceive(): starting\n");
@@ -393,8 +362,9 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
     }
     return recMsgSize;
 
+
  
-} /* MboxReceive */
+//} /* MboxReceive */
 
 /* returns 0 if successful, 1 if mailbox full, -1 if illegal args */
 /* ------------------------------------------------------------------------
@@ -434,7 +404,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	}
 	else{
 		/* deposit the message into the mailbox */
-		slotPtr temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
+		slotPtr temp = MailBoxTable[mbox_id % MAXMBOX].head;
 		for(; temp->nextSlot != NULL; temp = temp->nextSlot);
 		mailSlot newSlot;
         memcpy(newSlot.message, msg_ptr, msg_size);
@@ -491,7 +461,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 	if(MailBoxTable[mbox_id % MAXMBOX].usedSlots == 0)
 		return -2;
 	else{
-		temp = MailBoxTable[mbox_id % MAXMBOX].firstSlot;
+		temp = MailBoxTable[mbox_id % MAXMBOX].head;
 		/* if the size of the message stored in the slot is too large, return -1 */
 		if(temp->msg_size > msg_max_size){
 			return -1;
@@ -499,7 +469,7 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 		/* copy the message */
 		msg_ptr = temp->message;
 		/* "free" the slot in the mailbox */
-		MailBoxTable[mbox_id % MAXMBOX].firstSlot = MailBoxTable[mbox_id % MAXMBOX].firstSlot->nextSlot;
+		MailBoxTable[mbox_id % MAXMBOX].head = MailBoxTable[mbox_id % MAXMBOX].head->nextSlot;
 		MailBoxTable[mbox_id % MAXMBOX].usedSlots--;
 	}
 	return temp->msg_size;
@@ -688,7 +658,7 @@ void term_handler(int code, void * dev)
 int check_io(void){
     int i;
     for(i=0;i<MAXMBOX;i++){
-        if(MailBoxTable[i].receiveList!=NULL || MailBoxTable[i].sendList!=NULL)
+        if(MailBoxTable[i].waitList!=NULL)
             return 1;
     }
     return 0;
@@ -725,4 +695,57 @@ void enableInterrupts()
     /* We ARE in kernel mode */
         USLOSS_PsrSet( USLOSS_PsrGet() | USLOSS_PSR_CURRENT_INT );
 } /* enableInterrupts */
+
+/*
+ Adds a message into a slot for the specified mailbox.
+ 
+ Halts if # of slots used > allowed for the system.
+ Returns:
+    -1 if the msg size is greater than allowed for the mailbox || Mailbox is inactive || Mailbox is full
+    0 if succeeded
+ */
+int addMessage(int mbox_id, void *msg_ptr, int msg_size){
+    
+    // Check if there are any slots left in the system
+    if(slotsUsed>=MAXSLOTS){
+        USLOSS_Console("addMessage(): # of messages in slots exceed the maximum allowed. Halting...\n");
+        USLOSS_Halt(1);
+    }
+    
+    // Check if mailbox is full
+    if(MailBoxTable[mbox_id%MAXMBOX].slotsUsed >= MailBoxTable[mbox_id%MAXMBOX].maxSlots){
+        return -1;
+    }
+    
+    int i;
+    // Finding an empty slot to put into
+    for(i=0;i<MAXSLOTS;i++){
+        if(slots[i].status == INACTIVE){
+            // Checking Msg size & mailbox active
+            if(MailBoxTable[mbox_id%MAXMBOX].slotSize < msg_size || MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
+                return -1;
+            }
+            memcpy(slots[i].message, msg_ptr, msg_size);
+            slots[i].msg_size = msg_size;
+            slots[i].mboxID = mbox_id;
+            slots[i].status = i;
+            slots[i].nextSlot = NULL;
+            break;
+        }
+    }
+    
+    // Rejigger the head & tail pointers
+    if(MailBoxTable[mbox_id%MAXMBOX].head == NULL){
+        MailBoxTable[mbox_id%MAXMBOX].head = &slots[i];
+        MailBoxTable[mbox_id%MAXMBOX].tail = &slots[i];
+    }
+    else{
+        MailBoxTable[mbox_id%MAXMBOX].tail->nextSlot = &slots[i];
+        MailBoxTable[mbox_id%MAXMBOX].tail = &slots[i];
+    }
+    MailBoxTable[mbox_id%MAXMBOX].slotsUsed++;
+    slotsUsed++;
+    
+    return 0;
+}
 
