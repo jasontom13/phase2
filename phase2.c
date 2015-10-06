@@ -33,7 +33,7 @@ mailLine * getWaiter();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 0;
+int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -332,7 +332,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 			/* find the end of the waitList */
 			for(;tempWaiter->next != NULL; tempWaiter = tempWaiter->next);
 			/* append a new waitList object */
-			tempWaiter
 		}
 		tempWaiter->PID = getpid();
 		tempWaiter->next = NULL;
@@ -418,12 +417,14 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
         if(check_io()){
             USLOSS_Console("MboxCondSend(): OHHHHH\n");
         }
+        USLOSS_Console("MboxCondSend(): BACKUP1\n");
     }
 	// if the process is zapped, return -3
 	if(isZapped()){
 		USLOSS_Console("Process has been zapped\n");
 		return -3;
 	}
+	USLOSS_Console("MboxCondSend(): BACKUP2\n");
 	
 	/* disable interrupts */
 	disableInterrupts();
@@ -431,20 +432,27 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
 	/* if the mailbox is unable to accept further messages return -2 */
 	if(target->maxSlots == target->usedSlots){
+		USLOSS_Console("MboxCondSend(): BACKUP4\n");
 		return -2;
 	}
+
 	/* if there is a process blocked on receive from the mailbox */
 	else if(target->waitList != NULL){
+		USLOSS_Console("MboxCondSend(): BACKUP5\n");
 		int waitPID = target->waitList->PID;
 		memcpy(target->waitList->msg, msg_ptr, msg_size);
 		target->waitList->PID = INACTIVE;
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
 	}else{
+		USLOSS_Console("MboxCondSend(): BACKUP6\n");
 		/* deposit the message into the mailbox */
 		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
+		USLOSS_Console("MboxCondSend(): BACKUP7\n");
 		target->usedSlots++;
+		USLOSS_Console("MboxCondSend(): BACKUP8\n");
 		slotsUsed++;
+		USLOSS_Console("MboxCondSend(): BACKUP9\n");
 	}
 	return 0;
 }
