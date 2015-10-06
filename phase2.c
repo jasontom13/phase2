@@ -33,7 +33,7 @@ mailLine * getWaiter();
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 0;
+int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -255,7 +255,13 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
             USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", target->waitList->PID);
         //addMessage(mbox_id, MailBoxTable[mbox_id%MAXMBOX].waitList->msg, MailBoxTable[mbox_id%MAXMBOX].waitList->msgSize);
         /* place the message in the address of the waiting process */
+        if(target->waitList == NULL){
+            USLOSS_Console("MboxSend(): waitList is null\n");
+        }
         memcpy(target->waitList->msg, msg_ptr, msg_size);
+        target->waitList->msgSize=msg_size;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): after memcpy, the waitListMsg is : %s\n", target->waitList->msg);
 
         unblockProc(target->waitList->PID);
         if (DEBUG2 && debugflag2)
@@ -341,12 +347,15 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
 		/* on being unblocked, remove self from waitList and return message length */
 		USLOSS_Console("MboxReceive(): back from block\n");
-		USLOSS_Console("MboxReceive(): message: %s\n", msg_ptr);
+		USLOSS_Console("MboxReceive(): message: %s\n", tempWaiter->msg);
+        
+        memcpy(msg_ptr,tempWaiter->msg,tempWaiter->msgSize);
+        
 		tempWaiter->PID = INACTIVE;
 		target->waitList = target->waitList->next;
+        
 
-
-		return msg_size;
+		return tempWaiter->msgSize;
 	}
 
 	/* if the mailbox has since been released, return -3 */
