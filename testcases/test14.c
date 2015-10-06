@@ -16,7 +16,7 @@ char buf[256];
 int start2(char *arg)
 {
     int kid_status, kidpid;
-    int control = 0;
+    long control = 0;
 
     USLOSS_Console("start2(): started\n");
 
@@ -25,7 +25,7 @@ int start2(char *arg)
     USLOSS_Console("start2(): calling USLOSS_DeviceOutput to enable receive ");
     USLOSS_Console("interrupts, control = %d\n", control);
 
-    USLOSS_DeviceOutput(USLOSS_TERM_DEV, 1, &control);
+    USLOSS_DeviceOutput(USLOSS_TERM_DEV, 1, (void *)control);
 
     kidpid = fork1("XXp1", XXp1, NULL, 2 * USLOSS_MIN_STACK, 3);
 
