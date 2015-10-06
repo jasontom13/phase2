@@ -1,0 +1,7 @@
+make clean
+make
+make $1
+./$1 > output/$1.out
+echo Diff\'ing output with results;
+diff testResults/$1.txt output/$1.out
+echo After diff;
