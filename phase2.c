@@ -330,6 +330,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 			/* find the end of the waitList */
 			for(;tempWaiter->next != NULL; tempWaiter = tempWaiter->next);
 			/* append a new waitList object */
+			tempWaiter
 		}
 		tempWaiter->PID = getpid();
 		tempWaiter->next = NULL;
