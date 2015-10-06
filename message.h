@@ -16,7 +16,6 @@
 
 #define INACTIVE -1
 
-
 typedef struct mailSlot mailSlot;
 typedef struct mailSlot * slotPtr;
 typedef struct mailbox   mailbox;
@@ -30,10 +29,10 @@ struct mailbox {
     int maxSlots;
     int usedSlots;
     int slotSize;
-    slotPtr firstSlot;
+    slotPtr head;
+    slotPtr tail;
     /* a list of processes waiting for slots */
-    mailLine * receiveList;
-    mailLine * sendList;
+    mailLine * waitList;
 };
 
 struct mailSlot {
@@ -52,6 +51,19 @@ struct psrBits {
     unsigned int prevIntEnable:1;
     unsigned int unused:28;
 };
+
+typedef struct mailLine
+{
+  int PID;
+  // a pointer to the location in memory where the sent message is stored
+  void * msg;
+  // the max message size that can be held
+  int msgSize;
+  // the status of the mailLine object
+  int status;
+  // a pointer to the next mailLine object
+  mailLine * next;
+}mailLine;
 
 struct procStruct{
     int pid;
