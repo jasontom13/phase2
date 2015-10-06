@@ -27,7 +27,7 @@ typedef struct mailLine
 {
     int PID;
     // a pointer to the location in memory where the sent message is stored
-    void * msg;
+    char msg[MAX_MESSAGE];
     // the max message size that can be held
     int msgSize;
     // the status of the mailLine object
