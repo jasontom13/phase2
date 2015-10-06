@@ -28,12 +28,13 @@ void disableInterrupts();
 void enableInterrupts();
 int addMessage(int mbox_id, void *msg_ptr, int msg_size);
 void nullSys(sysargs *args);
+extern int waitDevice(int type, int unit, int *status);
 mailLine * getWaiter();
 extern int waitdevice(int type, int unit, int *status);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 0;
+int debugflag2 = 1;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -585,7 +586,7 @@ Returns - -1: the process was zap’ d while waiting
 0: successful completion
 Side Effects - none.
 ----------------------------------------------------------------------- */
-extern int waitdevice(int type, int unit, int *status)
+extern int waitDevice(int type, int unit, int *status)
 {
 	/* kernel mode test; halt if in user mode */
 	if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
@@ -616,6 +617,12 @@ void clock_handler(int devNum, void * unit)
         USLOSS_Console("clock_handler(): called for the %d time\n", interruptNum);
     }
     
+    // Conditionally send to clock mailbox every 5th interrupt.
+    if(interruptNum!=0 && interruptNum % 5 == 0){
+        MboxCondSend(CLOCKMBOX, &status, sizeof(int));
+    }
+    interruptNum++;
+    
     // Clock Handling Things
     if(USLOSS_Clock() - readCurStartTime() > 80000){
         timeSlice();
@@ -628,11 +635,7 @@ void clock_handler(int devNum, void * unit)
         USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
         USLOSS_Halt(1);
     }
-    // Conditionally send to clock mailbox every 5th interrupt.
-    if(interruptNum!=0 && interruptNum % 5 == 0){
-        MboxCondSend(CLOCKMBOX, &status, sizeof(int));
-    }
-    interruptNum++;
+    
 }
 
 // accepts interrupt signals from DISK device
