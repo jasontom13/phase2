@@ -551,6 +551,9 @@ int MboxRelease(int mbox_id)
      if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE)
          return -1;
      
+     // Releasing the mailbox
+     MailBoxTable[mbox_id%MAXMBOX].mboxID=INACTIVE;
+     
      // Zapping all blocked processes on mailbox DOES NOT WORK
      mailLine * temp;
      for(temp = MailBoxTable[mbox_id%MAXMBOX].waitList; temp!=NULL; temp = temp->next){
@@ -561,8 +564,7 @@ int MboxRelease(int mbox_id)
          return -3;
      }
      
-     // Releasing the mailbox
-     MailBoxTable[mbox_id%MAXMBOX].mboxID=INACTIVE;
+     
      
      return 0;
 }
