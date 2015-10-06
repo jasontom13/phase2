@@ -210,23 +210,25 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
             if(waitLine[i].status==INACTIVE){
                 if (DEBUG2 && debugflag2)
                     USLOSS_Console("MboxSend(): Found an open slot in waitLine at index %d.\n", i);
+                waitLine[i].status = i;
                 waitLine[i].PID=getpid();
                 waitLine[i].next=NULL;
-                if (DEBUG2 && debugflag2)
-                    USLOSS_Console("MboxSend(): here\n");
                 memcpy(waitLine[i].msg, msg_ptr, msg_size);
-                if (DEBUG2 && debugflag2)
-                    USLOSS_Console("MboxSend(): here\n");
                 waitLine[i].msgSize=msg_size;
                 if(MailBoxTable[mbox_id%MAXMBOX].waitList == NULL){
                     MailBoxTable[mbox_id%MAXMBOX].waitList = &waitLine[i];
+                    if (DEBUG2 && debugflag2)
+                        USLOSS_Console("MboxSend(): First sender in the waitList: %s\n", MailBoxTable[mbox_id%MAXMBOX].waitList->msg);
                 }
                 // Assigning the latest wait-ee to the next in line in the waitLine table.
                 else{
                     mailLine * temp;
                     for(temp = MailBoxTable[mbox_id%MAXMBOX].waitList; temp->next!=NULL; temp = temp->next);
                     temp->next = &waitLine[i];
+                    if (DEBUG2 && debugflag2)
+                        USLOSS_Console("MboxSend(): First sender in the waitList: %s\n", MailBoxTable[mbox_id%MAXMBOX].waitList->msg);
                 }
+                break;
             }
         }
         if (DEBUG2 && debugflag2)
@@ -245,8 +247,6 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
     if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
         return -3;
     }
-    if (DEBUG2 && debugflag2)
-        USLOSS_Console("MboxSend(): HERE\n");
     
     struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
     // Unblock process that is receiveBlocked and deliver it's message to the mailbox right away
@@ -255,15 +255,17 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
             USLOSS_Console("MboxSend(): Unblocking Proc %d.\n", target->waitList->PID);
         //addMessage(mbox_id, MailBoxTable[mbox_id%MAXMBOX].waitList->msg, MailBoxTable[mbox_id%MAXMBOX].waitList->msgSize);
         /* place the message in the address of the waiting process */
+        if(target->waitList == NULL){
+            USLOSS_Console("MboxSend(): waitList is null\n");
+        }
         memcpy(target->waitList->msg, msg_ptr, msg_size);
+        target->waitList->msgSize=msg_size;
+        if (DEBUG2 && debugflag2)
+            USLOSS_Console("MboxSend(): after memcpy, the waitListMsg is : %s\n", target->waitList->msg);
 
         unblockProc(target->waitList->PID);
         if (DEBUG2 && debugflag2)
             USLOSS_Console("MboxSend(): after unblockproc\n");
-        MailBoxTable[mbox_id%MAXMBOX].waitList->PID = INACTIVE;
-        MailBoxTable[mbox_id%MAXMBOX].waitList = MailBoxTable[mbox_id%MAXMBOX].waitList->next;
-        if (DEBUG2 && debugflag2)
-            USLOSS_Console("MboxSend(): nexxxttt\n");
     }
     
     // If there was no receiveBlocked processes, add the message like normal
@@ -341,13 +343,18 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		blockMe(BLOCKMECONSTANT);
 
 		/* on being unblocked, remove self from waitList and return message length */
-		USLOSS_Console("MboxReceive(): back from block\n");
-		USLOSS_Console("MboxReceive(): message: %s\n", msg_ptr);
+        if (DEBUG2 && debugflag2){
+            USLOSS_Console("MboxReceive(): back from block\n");
+            USLOSS_Console("MboxReceive(): message: %s\n", tempWaiter->msg);
+        }
+        
+        memcpy(msg_ptr,tempWaiter->msg,tempWaiter->msgSize);
+        
 		tempWaiter->PID = INACTIVE;
 		target->waitList = target->waitList->next;
+        
 
-
-		return msg_size;
+		return tempWaiter->msgSize;
 	}
 
 	/* if the mailbox has since been released, return -3 */
@@ -359,6 +366,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		if (DEBUG2 && debugflag2)
 			USLOSS_Console("MboxReceive(): get message: %s\n", target->head->message);
 		recMsgSize = target->head->msg_size;
+        if (DEBUG2 && debugflag2)
 		USLOSS_Console("MboxReceive(): recMsgSize = %d\n", recMsgSize);
 
 		void* answer;
@@ -794,9 +802,7 @@ void nullSys(sysargs *args){
 mailLine * getWaiter(){
 	int iter;
 	for(iter = 0; iter < MAXPROC; iter++){
-		USLOSS_Console("FUCKER %d\n", iter);
 		if(waitLine[iter].status == INACTIVE){
-			USLOSS_Console("%d\n", iter);
 			waitLine[iter].status = iter;
 			return &waitLine[iter];
 		}
