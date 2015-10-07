@@ -454,7 +454,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
 	/* if there is a process blocked on receive from the mailbox */
-	if(target->waitList != NULL){
+	if(target->waitList != NULL && target->head == NULL){
 		if (DEBUG2 && debugflag2){
 			USLOSS_Console("MboxCondSend(): a process is receiveBlocked\n");
 			USLOSS_Console("MboxCondSend(): message = %s\n", msg_ptr);
