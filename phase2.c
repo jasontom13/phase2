@@ -45,6 +45,18 @@ int boxID;
 // handlers, ...
 int slotsUsed;
 
+int invalidArgs(int mbox_id, int msg_max_size)
+{
+  if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
+	  return 1;
+  }
+  else if(msg_max_size > MAX_MESSAGE){
+	  return 1;
+  }
+  else
+	  return 0;
+}
+
 interruptHandler intTable[MAXHANDLERS];
 
 /* an array of waiting processes */
@@ -334,6 +346,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		if(target->waitList == NULL){
 			target->waitList = getWaiter();
 			tempWaiter = target->waitList;
+			USLOSS_Console("MboxReceive(): new waiter\n");
 		}
 		/* find a free waitList object in the array and append to waitList */
 		else{
@@ -341,6 +354,8 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 			/* find the end of the waitList */
 			for(;tempWaiter->next != NULL; tempWaiter = tempWaiter->next);
 			/* append a new waitList object */
+			tempWaiter->next = getWaiter();
+			tempWaiter = tempWaiter->next;
 		}
 		tempWaiter->PID = getpid();
 		tempWaiter->next = NULL;
@@ -357,10 +372,12 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         }
         
         memcpy(msg_ptr,tempWaiter->msg,tempWaiter->msgSize);
+
         
 		tempWaiter->PID = INACTIVE;
-		target->waitList = target->waitList->next;
-        
+		target->waitList = tempWaiter->next;
+		USLOSS_Console("MboxReceive(): %s\n%d\n", tempWaiter->msg, tempWaiter->msgSize);
+
 
 		return tempWaiter->msgSize;
 	}
@@ -413,12 +430,7 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	/* if the arguments passed to the method are invalid, return -1 */
 	if(invalidArgs(mbox_id, msg_size))
 	   return -1;
-    if (DEBUG2 && debugflag2){
-        USLOSS_Console("MboxCondSend(): WTF\n");
-        if(check_io()){
-            USLOSS_Console("MboxCondSend(): OHHHHH\n");
-        }
-    }
+
 	// if the process is zapped, return -3
 	if(isZapped()){
 		USLOSS_Console("Process has been zapped\n");
@@ -429,18 +441,23 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	disableInterrupts();
 	
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
-	/* if the mailbox is unable to accept further messages return -2 */
-	if(target->maxSlots == target->usedSlots){
-		return -2;
-	}
-
 	/* if there is a process blocked on receive from the mailbox */
-	else if(target->waitList != NULL){
+	if(target->waitList != NULL){
+		if (DEBUG2 && debugflag2){
+			USLOSS_Console("MboxCondSend(): a process is receiveBlocked\n");
+			USLOSS_Console("MboxCondSend(): message = %d\n", (int)msg_ptr);
+			USLOSS_Console("MboxCondSend(): size = %d\n", msg_size);
+		}
 		int waitPID = target->waitList->PID;
 		memcpy(target->waitList->msg, msg_ptr, msg_size);
 		target->waitList->PID = INACTIVE;
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
+	}
+	/* if the mailbox is unable to accept further messages return -2 */
+	else if(target->maxSlots == target->usedSlots){
+			return -2;
+
 	}else{
 		/* deposit the message into the mailbox */
         addMessage(mbox_id, msg_ptr, msg_size);
@@ -561,18 +578,6 @@ int MboxRelease(int mbox_id)
 }
 
  // a helper method which checks if the specified id and max size pass muster
-int invalidArgs(int mbox_id, int msg_max_size)
-{
-  if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
-	  return 1;
-  }
-  else if(msg_max_size > MAX_MESSAGE){
-	  return 1;
-  }
-  else
-	  return 0;
-}
-
 /*-----------------------------------------------------------------------
 Name - waitdevice
 Purpose - Do a receive operation on the mailbox associated with the given
@@ -609,16 +614,22 @@ extern int waitDevice(int type, int unit, int *status)
 void clock_handler(int devNum, void * unit)
 {
     static int interruptNum = 1;
-    int status;
     int valid;
+    int status;
     // Error checking if the device really is the clock device
     
     if (DEBUG2 && debugflag2){
         USLOSS_Console("clock_handler(): called for the %d time\n", interruptNum);
     }
     
+    // Getting the device status register info
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
+
     // Conditionally send to clock mailbox every 5th interrupt.
     if(interruptNum!=0 && interruptNum % 5 == 0){
+    	if (DEBUG2 && debugflag2){
+			USLOSS_Console("clock_handler(): sending message = %d\n", status);
+		}
         MboxCondSend(CLOCKMBOX, &status, sizeof(int));
     }
     interruptNum++;
@@ -627,10 +638,7 @@ void clock_handler(int devNum, void * unit)
     if(USLOSS_Clock() - readCurStartTime() > 80000){
         timeSlice();
     }
-    
-    // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
-    
+
     if (valid != USLOSS_DEV_OK){
         USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
         USLOSS_Halt(1);
@@ -702,9 +710,8 @@ void sys_handler(int code, void * args){
 int check_io(void){
     int i;
     for(i=0;i<MAXMBOX;i++){
-        if(MailBoxTable[i].waitList!=NULL){
-            if(MailBoxTable[i].waitList->PID == INACTIVE)
-                return 1;
+        if(MailBoxTable[i].waitList!=NULL && MailBoxTable[i].waitList->PID != INACTIVE){
+        	return 1;
         }
     }
     return 0;
