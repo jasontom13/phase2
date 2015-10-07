@@ -640,6 +640,11 @@ void clock_handler(int devNum, void * unit)
     
     // Getting the device status register info
     valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
+    
+    if (valid != USLOSS_DEV_OK){
+        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
+        USLOSS_Halt(1);
+    }
 
 
     // Conditionally send to clock mailbox every 5th interrupt.
@@ -656,10 +661,7 @@ void clock_handler(int devNum, void * unit)
         timeSlice();
     }
 
-    if (valid != USLOSS_DEV_OK){
-        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
-        USLOSS_Halt(1);
-    }
+    
     
 }
 
