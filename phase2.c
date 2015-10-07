@@ -45,18 +45,6 @@ int boxID;
 // handlers, ...
 int slotsUsed;
 
-int invalidArgs(int mbox_id, int msg_max_size)
-{
-  if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
-	  return 1;
-  }
-  else if(msg_max_size > MAX_MESSAGE){
-	  return 1;
-  }
-  else
-	  return 0;
-}
-
 interruptHandler intTable[MAXHANDLERS];
 
 /* an array of waiting processes */
@@ -163,10 +151,20 @@ int MboxCreate(int slots, int slot_size)
     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
         USLOSS_Halt(1);
     
+    /* test if number of slots too large or too small */
+    if(slots > MAXSLOTS || slots < 0)
+       	return -1;
+
+    /* test if slot size is too large or too small */
+    if(slot_size > MAX_MESSAGE || slot_size < 0)
+    	return -1;
+
     /* Finding the first free mailbox slot in mailboxtable */
     int i;
     for(i=boxID; i<boxID+MAXMBOX; i++){
         if(MailBoxTable[i%MAXMBOX].mboxID==INACTIVE){
+        	if (DEBUG2 && debugflag2)
+        	        USLOSS_Console("MboxCreate(): FOUND A BOX: %d\n", boxID);
             boxID=i;
             MailBoxTable[i%MAXMBOX].mboxID = boxID;
             MailBoxTable[i%MAXMBOX].maxSlots = slots;
@@ -175,7 +173,7 @@ int MboxCreate(int slots, int slot_size)
             MailBoxTable[i%MAXMBOX].head = NULL;
             MailBoxTable[i%MAXMBOX].tail = NULL;
             MailBoxTable[i%MAXMBOX].waitList = NULL;
-            return boxID;
+            return boxID % MAXMBOX;
         }
     }
     return -1;
@@ -394,7 +392,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 
 		void* answer;
 		answer = memcpy(msg_ptr, target->head->message, msg_size);
-		if(answer == NULL)
+		if(answer == NULL && msg_size != 0)
 			return -1;
 		/* take the empty slot off of the list and decrement the number of messages */
 		target->head->status = INACTIVE;
@@ -839,4 +837,15 @@ mailLine * getWaiter(){
 	return NULL;
 }
 
+int invalidArgs(int mbox_id, int msg_max_size)
+{
+  if(MailBoxTable[mbox_id%MAXMBOX].mboxID == INACTIVE){
+	  return 1;
+  }
+  else if(msg_max_size > MAX_MESSAGE){
+	  return 1;
+  }
+  else
+	  return 0;
+}
 
