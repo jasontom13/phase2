@@ -639,7 +639,6 @@ extern int waitDevice(int type, int unit, int *status)
 void clock_handler(int devNum, void * unit)
 {
     static int interruptNum = 1;
-    int valid;
     int status = 0;
     // Error checking if the device really is the clock device
     
@@ -834,8 +833,8 @@ void nullSys(systemArgs *args){
 mailLine * getWaiter(){
 	int iter;
 	for(iter = 0; iter < MAXPROC; iter++){
-		if(waitLine[iter].status == INACTIVE){
-			waitLine[iter].status = iter;
+		if(waitLine[iter].PID == INACTIVE){
+			waitLine[iter].PID = iter;
 			return &waitLine[iter];
 		}
 	}
