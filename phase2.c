@@ -92,7 +92,7 @@ int start1(char *arg)
     }
     
     for(iter=0;iter<MAXPROC;iter++){
-        waitLine[iter].status=INACTIVE;
+        waitLine[iter].PID=INACTIVE;
     }
     // Initialize syscall vector
     for(iter=0;iter<MAXSYSCALLS;iter++){
@@ -237,10 +237,9 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
         int i;
         // Finding an open slot in waitLine & adding the wait-ee's information into it.
         for(i=0;i<MAXPROC;i++){
-            if(waitLine[i].status==INACTIVE){
+            if(waitLine[i].PID==INACTIVE){
                 if (DEBUG2 && debugflag2)
                     USLOSS_Console("MboxSend(): Found an open slot in waitLine at index %d.\n", i);
-                waitLine[i].status = i;
                 waitLine[i].PID=getpid();
                 waitLine[i].next=NULL;
                 memcpy(waitLine[i].msg, msg_ptr, msg_size);
@@ -265,6 +264,7 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
             USLOSS_Console("MboxSend(): BLOCKED\n");
         blockMe(BLOCKMECONSTANT);
         // Check if the mailbox had been released
+        waitLine[i].PID=INACTIVE;
         if(MailBoxTable[mbox_id%MAXMBOX].mboxID== INACTIVE){
             return -3;
         }
@@ -610,6 +610,7 @@ Side Effects - none.
 ----------------------------------------------------------------------- */
 extern int waitDevice(int type, int unit, int *status)
 {
+    int valid;
 	/* kernel mode test; halt if in user mode */
 	if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
 		USLOSS_Halt(1);
@@ -620,6 +621,13 @@ extern int waitDevice(int type, int unit, int *status)
 	}
 	MboxReceive(MailBoxTable[(type)%MAXMBOX].mboxID, status, MAX_MESSAGE);
 
+    // Getting the device status register info
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, status);
+
+    if (valid != USLOSS_DEV_OK){
+        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
+        USLOSS_Halt(1);
+    }
 	/* if it was zapped while it was blocked, return -1 */
 	if(isZapped()){
 		return -1;
@@ -655,17 +663,6 @@ void clock_handler(int devNum, void * unit)
     if(USLOSS_Clock() - readCurStartTime() > 80000){
         timeSlice();
     }
-    
-    // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
-    
-    if (valid != USLOSS_DEV_OK){
-        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
-        USLOSS_Halt(1);
-    }
-
-    
-    
 }
 
 // accepts interrupt signals from DISK device
