@@ -27,14 +27,14 @@ int check_io(void);
 void disableInterrupts();
 void enableInterrupts();
 int addMessage(int mbox_id, void *msg_ptr, int msg_size);
-void nullSys(sysargs *args);
+void nullSys(systemArgs *args);
 extern int waitDevice(int type, int unit, int *status);
 mailLine * getWaiter();
 extern int waitdevice(int type, int unit, int *status);
 
 /* -------------------------- Globals ---	---------------------------------- */
 
-int debugflag2 = 1;
+int debugflag2 = 0;
 int BLOCKMECONSTANT = 22;
 
 // the mail boxes 
@@ -63,7 +63,7 @@ interruptHandler intTable[MAXHANDLERS];
 mailLine waitLine[MAXPROC];
 
 /* Syscall handler vector */
-void (*sys_vec[MAXSYSCALLS])(sysargs *args);
+void (*sys_vec[MAXSYSCALLS])(systemArgs *args);
 
 /* global array of slots */
 mailSlot slots[MAXSLOTS];
@@ -310,7 +310,8 @@ int MboxSend(int mbox_id, void *msg_ptr, int msg_size)
              Block the receiving process if no msg available.
    Parameters - mailbox id, pointer to put data of msg, max # of bytes that
                 can be received.
-   Returns - actual size of msg if successful, -1 if invalid args.
+   Returns - actual size of msg if successful, -1 if invalid args, -3 if
+   	   	   	 Mbox was zapped or released before receive occurred
    Side Effects - none.
    ----------------------------------------------------------------------- */
 int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
@@ -330,25 +331,24 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 	disableInterrupts();
 
 	struct mailbox * target = &MailBoxTable[mbox_id % MAXMBOX];
-	/* if send-blocked processes exist, move message into slot and unblock waiting process */
-	if(target->waitList != NULL){
-		int waitPID = target->waitList->PID;
-		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
-		target->waitList->PID = INACTIVE;
-		target->waitList = target->waitList->next;
-		recMsgSize = target->head->msg_size;
-		unblockProc(waitPID);
-	}
+	if (DEBUG2 && debugflag2)
+		        USLOSS_Console("MboxReceive(): Checkpoint1\n");
 	/* if the process is not able to obtain a message from the appropriate mailbox, block */
-	else if(target->usedSlots == 0){
+	if(target->usedSlots == 0){
+		if (DEBUG2 && debugflag2)
+			        USLOSS_Console("MboxReceive(): Checkpoint3\n");
 		/* add the current node to the rear of the waitList */
 		mailLine * tempWaiter;
 		if(target->waitList == NULL){
+			if (DEBUG2 && debugflag2)
+				        USLOSS_Console("MboxReceive(): Checkpoint4\n");
 			target->waitList = getWaiter();
 			tempWaiter = target->waitList;
 		}
 		/* find a free waitList object in the array and append to waitList */
 		else{
+			if (DEBUG2 && debugflag2)
+				        USLOSS_Console("MboxReceive(): Checkpoint5\n");
 			tempWaiter = target->waitList;
 			/* find the end of the waitList */
 			for(;tempWaiter->next != NULL; tempWaiter = tempWaiter->next);
@@ -375,12 +375,17 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         
 		tempWaiter->PID = INACTIVE;
 		target->waitList = tempWaiter->next;
+		if(DEBUG2 && debugflag2)
+			USLOSS_Console("MboxReceive(): %s\n%d\n", tempWaiter->msg, tempWaiter->msgSize);
 
 
-		return tempWaiter->msgSize;
+
+		recMsgSize = tempWaiter->msgSize;
 	}
 	/* else obtain the message */
 	else{
+		if (DEBUG2 && debugflag2)
+			        USLOSS_Console("MboxReceive(): Checkpoint6\n");
 		if (DEBUG2 && debugflag2)
 			USLOSS_Console("MboxReceive(): get message: %s\n", target->head->message);
 		recMsgSize = target->head->msg_size;
@@ -398,12 +403,23 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		slotsUsed--;
 	}
 
+	/* if send-blocked processes exist, move message into slot and unblock waiting process */
+	if(target->waitList != NULL && target->usedSlots != 0){
+		if (DEBUG2 && debugflag2)
+					USLOSS_Console("MboxReceive(): Checkpoint2\n");
+		int waitPID = target->waitList->PID;
+		addMessage(mbox_id, target->waitList->msg, target->waitList->msgSize);
+		target->waitList->PID = INACTIVE;
+		target->waitList = target->waitList->next;
+		recMsgSize = target->head->msg_size;
+		unblockProc(waitPID);
+	}
+
 	/* if the mailbox has since been released, return -3 */
 	if(target->mboxID == INACTIVE){
 		return -3;
-	}
-
-	return recMsgSize;
+	}else
+		return recMsgSize;
 } /* MboxReceive */
 
 /* returns 0 if successful, 1 if mailbox full, -1 if illegal args */
@@ -456,9 +472,8 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 		unblockProc(waitPID);
 	}
 	/* if the mailbox is unable to accept further messages return -2 */
-	else if(target->maxSlots == target->usedSlots){
+	else if(target->usedSlots >= target->maxSlots || slotsUsed>=MAXSLOTS){
 			return -2;
-
 	}else{
 		/* deposit the message into the mailbox */
         addMessage(mbox_id, msg_ptr, msg_size);
@@ -525,7 +540,10 @@ int MboxCondReceive(int mbox_id, void* msg_ptr, int msg_max_size)
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
 	}
-	return temp->msg_size;
+	if(isZapped() || MailBoxTable[mbox_id % MAXMBOX].mboxID == INACTIVE){
+		return -3;
+	}else
+		return temp->msg_size;
 }
 
 /* ------------------------------------------------------------------------
@@ -616,13 +634,14 @@ void clock_handler(int devNum, void * unit)
 {
     static int interruptNum = 1;
     int valid;
-    int status;
+    int status = 0;
     // Error checking if the device really is the clock device
     
     if (DEBUG2 && debugflag2){
         USLOSS_Console("clock_handler(): called for the %d time\n", interruptNum);
     }
     
+
 
 
     // Conditionally send to clock mailbox every 5th interrupt.
@@ -700,14 +719,19 @@ void term_handler(int code, void * dev)
 
 
 void sys_handler(int code, void * args){
-    if ((int)((sysargs *) args)->arg2 >= MAXSYSCALLS){
-        USLOSS_Console("nullSys: System call number out of bounds. Halting...\n");
-        USLOSS_Halt(1);
-    }
-    else{
-        sys_vec[(int)((sysargs *) args)->arg2](args);
+    if (DEBUG2 && debugflag2){
+        USLOSS_Console("sys_handler(): System call number is: %d\n", *(int*)args);
     }
     
+    if(*(int*)args>=0 && *(int*)args<MAXSYSCALLS){
+        systemArgs newArgs;
+        newArgs.number=*(int*)args;
+        sys_vec[*(int*)args](&newArgs);
+    }
+    else{
+        USLOSS_Console("syscallHandler(): sys number %d is wrong.  Halting...\n", *(int*)args);
+        USLOSS_Halt(1);
+    }
     
 }
 
@@ -807,10 +831,8 @@ int addMessage(int mbox_id, void *msg_ptr, int msg_size){
     return 0;
 }
 
-void nullSys(sysargs *args){
-    if (DEBUG2 && debugflag2){
-        USLOSS_Console("nullSys(): Called!\n");
-    }
+void nullSys(systemArgs *args){
+    USLOSS_Console("nullsys(): Invalid syscall %d. Halting...\n", args->number);
     USLOSS_Halt(1);
 }
 /* returns an inactive mailLine pointer */
