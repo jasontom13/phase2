@@ -346,7 +346,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 		if(target->waitList == NULL){
 			target->waitList = getWaiter();
 			tempWaiter = target->waitList;
-			USLOSS_Console("MboxReceive(): new waiter\n");
 		}
 		/* find a free waitList object in the array and append to waitList */
 		else{
@@ -376,7 +375,6 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
         
 		tempWaiter->PID = INACTIVE;
 		target->waitList = tempWaiter->next;
-		USLOSS_Console("MboxReceive(): %s\n%d\n", tempWaiter->msg, tempWaiter->msgSize);
 
 
 		return tempWaiter->msgSize;
@@ -387,7 +385,7 @@ int MboxReceive(int mbox_id, void *msg_ptr, int msg_size)
 			USLOSS_Console("MboxReceive(): get message: %s\n", target->head->message);
 		recMsgSize = target->head->msg_size;
         if (DEBUG2 && debugflag2)
-		USLOSS_Console("MboxReceive(): recMsgSize = %d\n", recMsgSize);
+            USLOSS_Console("MboxReceive(): recMsgSize = %d\n", recMsgSize);
 
 		void* answer;
 		answer = memcpy(msg_ptr, target->head->message, msg_size);
@@ -445,11 +443,14 @@ int MboxCondSend(int mbox_id, void* msg_ptr, int msg_size)
 	if(target->waitList != NULL){
 		if (DEBUG2 && debugflag2){
 			USLOSS_Console("MboxCondSend(): a process is receiveBlocked\n");
-			USLOSS_Console("MboxCondSend(): message = %d\n", (int)msg_ptr);
+			USLOSS_Console("MboxCondSend(): message = %d\n", *(int *)msg_ptr);
 			USLOSS_Console("MboxCondSend(): size = %d\n", msg_size);
 		}
 		int waitPID = target->waitList->PID;
 		memcpy(target->waitList->msg, msg_ptr, msg_size);
+        if (DEBUG2 && debugflag2){
+            USLOSS_Console("MboxCondSend(): waitListMsg: %d\n", target->waitList->msg);
+        }
 		target->waitList->PID = INACTIVE;
 		target->waitList = target->waitList->next;
 		unblockProc(waitPID);
@@ -622,13 +623,7 @@ void clock_handler(int devNum, void * unit)
         USLOSS_Console("clock_handler(): called for the %d time\n", interruptNum);
     }
     
-    // Getting the device status register info
-    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
-    
-    if (valid != USLOSS_DEV_OK){
-        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
-        USLOSS_Halt(1);
-    }
+
 
     // Conditionally send to clock mailbox every 5th interrupt.
     if(interruptNum!=0 && interruptNum % 5 == 0){
@@ -642,6 +637,14 @@ void clock_handler(int devNum, void * unit)
     // Clock Handling Things
     if(USLOSS_Clock() - readCurStartTime() > 80000){
         timeSlice();
+    }
+    
+    // Getting the device status register info
+    valid = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, (long) unit, &status);
+    
+    if (valid != USLOSS_DEV_OK){
+        USLOSS_Console("clock_handler: USLOSS_DeviceInput returned a bad value.\n");
+        USLOSS_Halt(1);
     }
 
     
